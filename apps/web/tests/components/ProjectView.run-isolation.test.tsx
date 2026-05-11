@@ -92,7 +92,9 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
-  FileWorkspace: () => null,
+  FileWorkspace: ({ streaming }: { streaming: boolean }) => (
+    <output data-testid="workspace-streaming-state">{streaming ? 'streaming' : 'idle'}</output>
+  ),
 }));
 
 vi.mock('../../src/components/Loading', () => ({
@@ -363,6 +365,7 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(screen.getByTestId('chat-error').textContent).toBe('messages unavailable'));
     await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('idle'));
     expect(screen.getByTestId('send-message')).toHaveProperty('disabled', true);
+    expect(screen.getByTestId('workspace-streaming-state').textContent).toBe('streaming');
 
     fireEvent.click(screen.getByTestId('send-message'));
 

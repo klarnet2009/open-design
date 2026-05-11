@@ -372,6 +372,7 @@ export function ProjectView({
   const currentConversationSendDisabled = currentConversationLoading
     || currentConversationHasActiveRun
     || failedMessagesConversationId === activeConversationId;
+  const currentConversationActionDisabled = currentConversationBusy || currentConversationSendDisabled;
   const activeCompletionNotificationRunsRef = useRef<Set<string>>(new Set());
   const completedNotificationRunsRef = useRef<Set<string>>(new Set());
 
@@ -1382,6 +1383,7 @@ export function ProjectView({
               (prev) => ({
                 ...prev,
                 endedAt: Date.now(),
+                runStatus: 'failed',
                 events: [
                   ...(prev.events ?? []),
                   { kind: 'status', label: 'empty_response', detail: config.model },
@@ -1696,7 +1698,7 @@ export function ProjectView({
 
   const handleContinueRemainingTasks = useCallback(
     (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
-      if (currentConversationBusy || todos.length === 0) return;
+      if (currentConversationActionDisabled || todos.length === 0) return;
       const remainingList = todos
         .map((todo, i) => {
           const label =
@@ -1712,12 +1714,12 @@ export function ProjectView({
         'Update TodoWrite as you complete each remaining task.';
       void handleSend(prompt, [], []);
     },
-    [currentConversationBusy, handleSend],
+    [currentConversationActionDisabled, handleSend],
   );
 
   const handleExportAsPptx = useCallback(
     (fileName: string) => {
-      if (currentConversationBusy) return;
+      if (currentConversationActionDisabled) return;
       const baseTitle = fileName.replace(/\.html?$/i, '') || fileName;
       const prompt =
         `Export @${fileName} as an editable PPTX file titled "${baseTitle}".\n\n` +
@@ -1755,7 +1757,7 @@ export function ProjectView({
       };
       void handleSend(prompt, [attachment], []);
     },
-    [currentConversationBusy, handleSend],
+    [currentConversationActionDisabled, handleSend],
   );
 
   const handleStop = useCallback(() => {
@@ -2290,7 +2292,7 @@ export function ProjectView({
               onRequestOpenFile={requestOpenFile}
               initialDraft={chatInitialDraft}
               onSubmitForm={(text) => {
-                if (currentConversationBusy) return;
+                if (currentConversationActionDisabled) return;
                 void handleSend(text, [], []);
               }}
               onContinueRemainingTasks={handleContinueRemainingTasks}
@@ -2344,7 +2346,7 @@ export function ProjectView({
           }}
           isDeck={isDeck}
           onExportAsPptx={handleExportAsPptx}
-          streaming={currentConversationBusy}
+          streaming={currentConversationActionDisabled}
           openRequest={openRequest}
           liveArtifactEvents={liveArtifactEvents}
           tabsState={openTabsState}

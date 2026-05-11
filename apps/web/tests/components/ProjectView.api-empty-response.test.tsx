@@ -248,7 +248,7 @@ describe('ProjectView API empty response handling', () => {
           const message = call[2] as ChatMessage;
           return (
             message.role === 'assistant' &&
-            message.runStatus === undefined &&
+            message.runStatus === 'failed' &&
             message.events?.some(
               (event: AgentEvent) => event.kind === 'status' && event.label === 'empty_response',
             )
@@ -256,6 +256,7 @@ describe('ProjectView API empty response handling', () => {
         }),
       ).toBe(true);
     });
+    expect(mockedPlaySound).toHaveBeenCalledWith('failure-sound');
   });
 
   it('marks attached saved comments as failed when an API completion has no output', async () => {
@@ -297,7 +298,7 @@ describe('ProjectView API empty response handling', () => {
     });
     await waitFor(() => {
       expect(hasSavedAssistantMessage((message) => (
-        message.runStatus === undefined &&
+        message.runStatus === 'failed' &&
         message.events?.some((event) => event.kind === 'status' && event.label === 'empty_response') === true
       ))).toBe(true);
     });
