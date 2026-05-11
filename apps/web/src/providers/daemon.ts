@@ -147,6 +147,10 @@ export interface DaemonStreamOptions {
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
+  // Per-turn skill ids picked via the composer's @-mention popover. These
+  // are layered onto the system prompt for this run only and do not
+  // change the project's persistent `skillId`.
+  skillIds?: string[];
   designSystemId?: string | null;
   // Project-relative paths the user has staged for this turn. The
   // daemon resolves them inside the project folder, validates they
@@ -186,6 +190,7 @@ export async function streamViaDaemon({
   assistantMessageId,
   clientRequestId,
   skillId,
+  skillIds,
   designSystemId,
   attachments,
   commentAttachments,
@@ -210,6 +215,7 @@ export async function streamViaDaemon({
     assistantMessageId: assistantMessageId ?? null,
     clientRequestId: clientRequestId ?? null,
     skillId: skillId ?? null,
+    skillIds: Array.isArray(skillIds) ? skillIds : [],
     designSystemId: designSystemId ?? null,
     attachments: attachments ?? [],
     commentAttachments: commentAttachments ?? [],
