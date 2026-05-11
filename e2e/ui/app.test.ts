@@ -919,6 +919,212 @@ test('reloading an older conversation route restores its unsent composer draft',
   await expect(composerInput).toHaveValue(restoredDraft);
 });
 
+test('switching between conversations restores staged chat attachments per conversation', async ({ page }) => {
+  await page.route('**/api/agents', async (route) => {
+    await route.fulfill({
+      json: {
+        agents: [
+          {
+            id: 'mock',
+            name: 'Mock Agent',
+            bin: 'mock-agent',
+            available: true,
+            version: 'test',
+            models: [{ id: 'default', label: 'Default' }],
+          },
+        ],
+      },
+    });
+  });
+
+  await page.route('**/api/runs', async (route) => {
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"conversation-attachment-run"}',
+    });
+  });
+
+  await page.route('**/api/runs/*/events', async (route) => {
+    const body = [
+      'event: start',
+      'data: {"bin":"mock-agent"}',
+      '',
+      'event: end',
+      'data: {"code":0,"status":"succeeded"}',
+      '',
+      '',
+    ].join('\n');
+
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body,
+    });
+  });
+
+  await page.goto('/');
+  await page.getByTestId('new-project-name').fill('Conversation attachment restore');
+  await page.getByTestId('create-project').click();
+  await expectWorkspaceReady(page);
+
+  const firstPrompt = 'Attachment conversation one';
+  const secondPrompt = 'Attachment conversation two';
+
+  await sendPrompt(page, firstPrompt);
+  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
+
+  const firstUploadResponse = page.waitForResponse(
+    (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
+    { timeout: 5000 },
+  );
+  await page.getByTestId('chat-file-input').setInputFiles({
+    name: 'first-draft-attachment.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('First conversation staged attachment.\n', 'utf8'),
+  });
+  await expect((await firstUploadResponse).ok()).toBeTruthy();
+  await expect(page.getByTestId('staged-attachments')).toContainText('first-draft-attachment.txt');
+
+  await page.getByTestId('new-conversation').click();
+  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await sendPrompt(page, secondPrompt);
+  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
+  await expect(page.getByTestId('staged-attachments')).toHaveCount(0);
+
+  const secondUploadResponse = page.waitForResponse(
+    (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
+    { timeout: 5000 },
+  );
+  await page.getByTestId('chat-file-input').setInputFiles({
+    name: 'second-draft-attachment.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('Second conversation staged attachment.\n', 'utf8'),
+  });
+  await expect((await secondUploadResponse).ok()).toBeTruthy();
+  await expect(page.getByTestId('staged-attachments')).toContainText('second-draft-attachment.txt');
+  await expect(page.getByTestId('staged-attachments')).not.toContainText('first-draft-attachment.txt');
+
+  await page.getByTestId('conversation-history-trigger').click();
+  const historyList = page.getByTestId('conversation-list');
+  await expect(historyList).toBeVisible();
+  await historyList
+    .locator('.chat-conv-item')
+    .filter({ hasText: firstPrompt })
+    .first()
+    .locator('[data-testid^="conversation-select-"]')
+    .click();
+
+  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
+  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
+  await expect(page.getByTestId('staged-attachments')).toContainText('first-draft-attachment.txt');
+  await expect(page.getByTestId('staged-attachments')).not.toContainText('second-draft-attachment.txt');
+
+  await page.getByTestId('conversation-history-trigger').click();
+  await expect(historyList).toBeVisible();
+  await historyList
+    .locator('.chat-conv-item')
+    .filter({ hasText: secondPrompt })
+    .first()
+    .locator('[data-testid^="conversation-select-"]')
+    .click();
+
+  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
+  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt })).toHaveCount(0);
+  await expect(page.getByTestId('staged-attachments')).toContainText('second-draft-attachment.txt');
+  await expect(page.getByTestId('staged-attachments')).not.toContainText('first-draft-attachment.txt');
+});
+
+test('reloading an older conversation route restores its staged chat attachments', async ({ page }) => {
+  await page.route('**/api/agents', async (route) => {
+    await route.fulfill({
+      json: {
+        agents: [
+          {
+            id: 'mock',
+            name: 'Mock Agent',
+            bin: 'mock-agent',
+            available: true,
+            version: 'test',
+            models: [{ id: 'default', label: 'Default' }],
+          },
+        ],
+      },
+    });
+  });
+
+  await page.route('**/api/runs', async (route) => {
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"conversation-attachment-reload-run"}',
+    });
+  });
+
+  await page.route('**/api/runs/*/events', async (route) => {
+    const body = [
+      'event: start',
+      'data: {"bin":"mock-agent"}',
+      '',
+      'event: end',
+      'data: {"code":0,"status":"succeeded"}',
+      '',
+      '',
+    ].join('\n');
+
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body,
+    });
+  });
+
+  await page.goto('/');
+  await page.getByTestId('new-project-name').fill('Conversation attachment reload restore');
+  await page.getByTestId('create-project').click();
+  await expectWorkspaceReady(page);
+
+  const firstPrompt = 'Attachment reload conversation one';
+  const secondPrompt = 'Attachment reload conversation two';
+
+  await sendPrompt(page, firstPrompt);
+  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
+  const firstContext = await getCurrentProjectContext(page);
+
+  await page.getByTestId('new-conversation').click();
+  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await sendPrompt(page, secondPrompt);
+  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
+
+  await page.goto(`/projects/${firstContext.projectId}/conversations/${firstContext.conversationId}`);
+  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
+  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
+
+  const uploadResponse = page.waitForResponse(
+    (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
+    { timeout: 5000 },
+  );
+  await page.getByTestId('chat-file-input').setInputFiles({
+    name: 'reload-staged-attachment.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('Attachment that should survive a reload.\n', 'utf8'),
+  });
+  await expect((await uploadResponse).ok()).toBeTruthy();
+  await expect(page.getByTestId('staged-attachments')).toContainText('reload-staged-attachment.txt');
+
+  await page.reload();
+  await expect(page.getByTestId('chat-composer')).toBeVisible();
+  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
+  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
+  await expect(page.getByTestId('staged-attachments')).toContainText('reload-staged-attachment.txt');
+});
+
 test('a later completed run updates the workspace to the newest artifact tab and preview', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
