@@ -3,6 +3,32 @@ import type { RouteDeps } from './server-context.js';
 
 export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle'> {}
 
+// Invariant: a chat assistant message row reflects its run's terminal state
+// even when the web client never persists the cancel/finish itself (refresh
+// or dropped PUT). Without this, a row stuck at run_status='running' /
+// ended_at=NULL makes the elapsed-time renderer fall back to now - startedAt
+// after reload. COALESCE preserves any endedAt the web already wrote; the
+// run_status guard skips rows the web has already finalized.
+function reconcileAssistantMessageOnRunEnd(
+  db: RegisterChatRoutesDeps['db'],
+  runs: RegisterChatRoutesDeps['design']['runs'],
+  run: { assistantMessageId: string | null },
+): void {
+  if (!run.assistantMessageId) return;
+  void runs
+    .wait(run)
+    .then((finalStatus: { status: string }) => {
+      db.prepare(
+        `UPDATE messages
+            SET run_status = ?, ended_at = COALESCE(ended_at, ?)
+          WHERE id = ? AND run_status IN ('queued', 'running')`,
+      ).run(finalStatus.status, Date.now(), run.assistantMessageId);
+    })
+    .catch((err: unknown) => {
+      console.warn('[runs] message reconciliation failed', err);
+    });
+}
+
 export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
@@ -33,27 +59,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const body = { runId: run.id };
     res.status(202).json(body);
     design.runs.start(run, () => startChatRun(req.body || {}, run));
-    // Reconcile the assistant message row when the run reaches a terminal
-    // state. Without this, a Stop-then-refresh sequence leaves the row stuck
-    // at run_status='running' / ended_at=NULL — the web reattach effect then
-    // never freezes the elapsed timer and it keeps accumulating from the
-    // original startedAt (issue #135). The COALESCE preserves any endedAt the
-    // web client already persisted, and the run_status guard skips rows the
-    // web has already finalized.
-    if (run.assistantMessageId) {
-      void design.runs
-        .wait(run)
-        .then((finalStatus: { status: string }) => {
-          db.prepare(
-            `UPDATE messages
-                SET run_status = ?, ended_at = COALESCE(ended_at, ?)
-              WHERE id = ? AND run_status IN ('queued', 'running')`,
-          ).run(finalStatus.status, Date.now(), run.assistantMessageId);
-        })
-        .catch((err: unknown) => {
-          console.warn('[runs] message reconciliation failed', err);
-        });
-    }
+    reconcileAssistantMessageOnRunEnd(db, design.runs, run);
   });
 
   app.get('/api/runs', (req, res) => {
