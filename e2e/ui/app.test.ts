@@ -4,6 +4,11 @@ import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
 
 const STORAGE_KEY = 'open-design:config';
+const APP_OWNED_SCENARIO_FLOWS = new Set([
+  'design-files-upload',
+  'design-files-delete',
+  'design-files-tab-persistence',
+]);
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((key) => {
@@ -24,7 +29,9 @@ test.beforeEach(async ({ page }) => {
   }, STORAGE_KEY);
 });
 
-for (const entry of automatedUiScenarios()) {
+for (const entry of automatedUiScenarios().filter(
+  (scenario) => !APP_OWNED_SCENARIO_FLOWS.has(scenario.flow ?? ''),
+)) {
   test(`${entry.id}: ${entry.title}`, async ({ page }) => {
     await page.route('**/api/agents', async (route) => {
       await route.fulfill({
@@ -424,8 +431,8 @@ async function createProject(
 async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
 }
 
 async function sendPrompt(
@@ -835,7 +842,8 @@ async function runConversationPersistenceFlow(
   await expectArtifactVisible(page, entry);
 
   await page.getByTestId('new-conversation').click();
-  await expect(page.getByText('Start a conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
 
   const nextPrompt = entry.secondaryPrompt!;
   await sendPrompt(page, nextPrompt);
