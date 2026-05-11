@@ -116,12 +116,27 @@ function tagUnresolvedChangesRequested(facts: PrFacts): Tag | null {
     .filter((r) => r.state === "CHANGES_REQUESTED" && r.author?.login)
     .map((r) => r.author?.login)
     .filter((login): login is string => typeof login === "string");
-  if (reviewers.length === 0) return null;
-  return {
-    name: "unresolved-changes-requested",
-    reason: `latestReviews carries CHANGES_REQUESTED from: ${[...new Set(reviewers)].join(", ")}`,
-    source: "gh.latestReviews[].state",
-  };
+  if (reviewers.length > 0) {
+    return {
+      name: "unresolved-changes-requested",
+      reason: `latestReviews carries CHANGES_REQUESTED from: ${[...new Set(reviewers)].join(", ")}`,
+      source: "gh.latestReviews[].state",
+    };
+  }
+  // GitHub's reviewDecision keeps a reviewer's CHANGES_REQUESTED in effect
+  // until that same reviewer submits APPROVED or DISMISSED — COMMENTED does
+  // NOT supersede it. Our reducer collapses every reviewer to their latest
+  // state with no special-casing, so the per-reviewer CHANGES_REQUESTED
+  // gets hidden once they follow up with COMMENTED. Fall back to the
+  // PR-level reviewDecision so the tag still fires in that shape.
+  if (facts.reviewDecision === "CHANGES_REQUESTED") {
+    return {
+      name: "unresolved-changes-requested",
+      reason: "reviewDecision=CHANGES_REQUESTED at PR level (no per-reviewer CHANGES_REQUESTED visible after latest-per-author reduction; a reviewer's earlier CHANGES_REQUESTED was followed by COMMENTED)",
+      source: "gh.reviewDecision",
+    };
+  }
+  return null;
 }
 
 function tagStaleApproval(facts: PrFacts): Tag | null {
