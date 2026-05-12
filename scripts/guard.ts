@@ -464,7 +464,7 @@ const tailwindDefaultColorNames = [
   "black",
 ].join("|");
 const defaultTailwindPaletteClassPattern = new RegExp(
-  `\\b(?:bg|text|border|from|via|to|ring|outline|decoration|accent|caret|fill|stroke)-(?:${tailwindDefaultColorNames})(?:-\\d{2,3})?\\b`,
+  `\\b(?:bg|text|border|divide|from|via|to|ring|outline|decoration|accent|caret|fill|stroke)-(?:${tailwindDefaultColorNames})(?:-\\d{2,3})?\\b`,
   "g",
 );
 
