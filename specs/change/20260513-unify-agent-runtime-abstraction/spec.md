@@ -115,112 +115,20 @@ flowchart TD
 - Phase/area: duplication guard. Validation: 增加源边界回归测试或 guard，禁止 `server.ts`/`connectionTest.ts` 重新出现 `def.streamFormat ===`、直接 parser handler imports、直接 `attachAcpSession`/`attachPiRpcSession` 调用。Source: `apps/daemon/src/server.ts:4080-4176`, `apps/daemon/src/connectionTest.ts:901-968`
 - Phase/area: existing regression suites. Validation: 继续运行 `apps/daemon/tests/structured-streams.test.ts`、`qoder-stream.test.ts`、`json-event-stream.test.ts`、`pi-rpc.test.ts`、`acp.test.ts`，以及 `pnpm --filter @open-design/daemon test`、`pnpm --filter @open-design/daemon typecheck`、`pnpm guard`、`pnpm typecheck`。Source: `apps/daemon/tests/structured-streams.test.ts:1-10`, `apps/daemon/tests/qoder-stream.test.ts:1-18`, `apps/daemon/tests/json-event-stream.test.ts:1-14`, `apps/daemon/tests/pi-rpc.test.ts:1-10`, `apps/daemon/tests/acp.test.ts:1-10`
 
-### Upper-layer Call Flow
+### Pseudocode
 
-`server.ts` 仍然拥有 run lifecycle、参数校验、spawn、SSE、诊断和最终状态落库；它只通过两个入口接触 runtime：
-
-- `RuntimeAgentDef`：回答“怎么启动这个 agent runtime”。
-- `RuntimeAdapter`：回答“启动后怎么通信、怎么解析输出、怎么判断完成状态”。
-
-调用流程：
-
-```ts
-const def = getAgentDef(agentId);
-if (!def) {
-  return design.runs.fail(run, 'AGENT_UNAVAILABLE', `unknown agent: ${agentId}`);
-}
-
-const adapter = resolveRuntimeAdapter(def);
-
-const critiqueShouldRun =
-  critiqueCfg.enabled &&
-  adapter.capabilities.critiqueTheater &&
-  hasCritiqueContext &&
-  !isMediaSurface;
-
-const prompt = composeSystemPrompt({
-  ...promptInputs,
-  promptMode: adapter.capabilities.promptMode,
-  critique: critiqueShouldRun ? critiqueCfg : undefined,
-});
-
-await adapter.prepareExternalMcp?.({
-  def,
-  cwd: effectiveCwd,
-  mcpServers,
-  projectRoot: PROJECT_ROOT,
-});
-
-const args = def.buildArgs(
-  prompt,
-  safeImages,
-  extraAllowedDirs,
-  { model: safeModel, reasoning: safeReasoning },
-  { cwd: effectiveCwd },
-);
-
-const child = spawn(invocation.command, invocation.args, {
-  env,
-  stdio: [adapter.stdinMode({ def, prompt }), 'pipe', 'pipe'],
-  cwd: effectiveCwd,
-  shell: false,
-  windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-});
-
-const sink = createRuntimeSink({
-  send,
-  noteAgentActivity,
-  clearInactivityWatchdog,
-  tracksSubstantiveOutput: adapter.capabilities.tracksSubstantiveOutput,
-});
-
-const attachment = adapter.attach({
-  child,
-  def,
-  prompt,
-  cwd: effectiveCwd,
-  model: safeModel,
-  mcpServers,
-  imagePaths: def.supportsImagePaths ? safeImages : [],
-  uploadRoot: UPLOAD_DIR,
-  sink,
-});
-
-run.runtimeSession = attachment.session ?? null;
-run.acpSession = attachment.session ?? null; // transition compatibility
-
-adapter.deliverPrompt?.({
-  child,
-  prompt,
-  attachment,
-});
-
-child.on('close', (code, signal) => {
-  if (attachment.session?.hasFatalError?.()) {
-    return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
-  }
-
-  if (sink.hasStreamError()) {
-    return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
-  }
-
-  if (sink.shouldFailForEmptyOutput({ code, canceled: run.cancelRequested })) {
-    send('error', createSseErrorPayload(...));
-    return design.runs.finish(run, 'failed', code, signal);
-  }
-
-  const adapterStatus = attachment.closeOverride?.({ code, signal }) ?? null;
-  const status = adapterStatus ?? defaultStatusFromExit({
-    code,
-    signal,
-    canceled: run.cancelRequested,
-  });
-
-  return design.runs.finish(run, status, code, signal);
-});
-```
-
-`connectionTest.ts` 使用同一个 adapter attach/close 模型，但替换 `send`、`sink` 和最终 result mapping 为 connection-test 本地实现；不得维护第二套按 `streamFormat` 分支的 stream/session dispatch。
+Flow:
+  Resolve `def = getAgentDef(agentId)`
+  Resolve `adapter = resolveRuntimeAdapter(def)`; throw on missing adapter
+  Ask adapter capabilities for prompt mode / critique eligibility / substantive-output tracking
+  Compose prompt with explicit prompt mode capability
+  Let adapter prepare runtime-specific external MCP delivery
+  Spawn child with `adapter.stdinMode(ctx)`
+  Create `RuntimeSink` bound to SSE + run state
+  Call `attachment = adapter.attach({ child, prompt, cwd, model, mcpServers, sink, ... })`
+  Store `attachment.session` on run for cancellation
+  Let adapter deliver prompt when needed
+  On close, merge generic status with `attachment.closePolicy` / session status
 
 ### File Structure
 
