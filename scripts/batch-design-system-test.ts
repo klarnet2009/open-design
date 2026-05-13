@@ -89,6 +89,10 @@ interface RunStatusResponse {
   updatedAt?: number;
 }
 
+interface ProjectFilesResponse {
+  files?: unknown[];
+}
+
 interface DesignSystemsResponse {
   designSystems?: Array<{ id: string; title?: string }>;
   systems?: Array<{ id: string; title?: string }>;
@@ -109,6 +113,35 @@ interface BatchResult {
   status: 'created' | RunStatusResponse['status'];
   daemonUrl: string;
   error?: string;
+}
+
+function buildRunPrompt(prompt: string, skipDiscoveryBrief: boolean): string {
+  if (!skipDiscoveryBrief) return prompt;
+  // The persisted skipDiscoveryBrief flag is understood by newer daemons, but
+  // this script is often run against an already-started daemon while developing
+  // the branch. Include the user-level escape hatch too so older daemons still
+  // bypass the discovery form and actually build files.
+  return `skip questions, just build. no questions, go.\n\n${prompt}`;
+}
+
+function extractAgentTextFromSse(body: string): string {
+  const chunks: string[] = [];
+  for (const block of body.split(/\n\n+/)) {
+    const eventLine = block.split('\n').find((line) => line.startsWith('event:'));
+    if (eventLine?.slice('event:'.length).trim() !== 'agent') continue;
+    const dataLines = block
+      .split('\n')
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice('data:'.length).trimStart());
+    if (dataLines.length === 0) continue;
+    try {
+      const payload = JSON.parse(dataLines.join('\n')) as { type?: string; delta?: unknown };
+      if (payload.type === 'text_delta' && typeof payload.delta === 'string') chunks.push(payload.delta);
+    } catch {
+      // Ignore malformed/non-JSON event payloads.
+    }
+  }
+  return chunks.join('');
 }
 
 function printHelp(): void {
@@ -391,6 +424,11 @@ function makeMessageId(kind: 'user' | 'assistant'): string {
   return `${RUN_PREFIX}${kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function formatBatchTimestamp(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function terminal(status: RunStatusResponse['status']): boolean {
   return status === 'succeeded' || status === 'failed' || status === 'canceled';
 }
@@ -404,6 +442,14 @@ async function waitForRun(daemonUrl: string, runId: string, timeoutMs: number): 
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
   throw new Error(`run timed out after ${timeoutMs}ms${last ? ` (last status: ${last.status})` : ''}`);
+}
+
+async function readRunAssistantText(daemonUrl: string, runId: string): Promise<string> {
+  const body = await fetch(`${daemonUrl.replace(/\/$/, '')}/api/runs/${encodeURIComponent(runId)}/events`).then((resp) => {
+    if (!resp.ok) throw new Error(`GET /api/runs/${runId}/events → ${resp.status}`);
+    return resp.text();
+  });
+  return extractAgentTextFromSse(body);
 }
 
 async function appendJsonl(output: string | null | undefined, row: BatchResult): Promise<void> {
@@ -420,8 +466,9 @@ async function runOne(params: {
   config: Required<Pick<BatchConfig, 'agentId' | 'startRuns' | 'wait' | 'skipDiscoveryBrief' | 'timeoutMs'>> & BatchConfig;
 }): Promise<BatchResult> {
   const { daemonUrl, prompt, designSystemId, config } = params;
+  const runPrompt = buildRunPrompt(prompt, config.skipDiscoveryBrief);
   const projectId = makeProjectId(designSystemId);
-  const projectName = `${config.namePrefix ?? `DS batch ${new Date().toISOString()}`} — ${designSystemId}`;
+  const projectName = `${config.namePrefix ?? 'DS batch'} — ${designSystemId} — ${formatBatchTimestamp(new Date())}`;
   const metadata: ProjectMetadata = {
     kind: DEFAULT_KIND,
     platform: DEFAULT_PLATFORM,
@@ -435,7 +482,7 @@ async function runOne(params: {
     name: projectName,
     skillId: config.skillId ?? null,
     designSystemId,
-    pendingPrompt: prompt,
+    pendingPrompt: runPrompt,
     metadata,
     customInstructions: config.customInstructions ?? undefined,
     skipDiscoveryBrief: config.skipDiscoveryBrief,
@@ -451,13 +498,14 @@ async function runOne(params: {
   const assistantMessageId = makeMessageId('assistant');
   await api(daemonUrl, 'PUT', `/api/projects/${projectId}/conversations/${conversationId}/messages/${userMessageId}`, {
     role: 'user',
-    content: prompt,
+    content: runPrompt,
     createdAt: now,
   });
   await api(daemonUrl, 'PUT', `/api/projects/${projectId}/conversations/${conversationId}/messages/${assistantMessageId}`, {
     role: 'assistant',
     content: '',
     agentId: config.agentId,
+    agentName: config.agentId,
     runStatus: 'queued',
     startedAt: now,
     createdAt: now,
@@ -465,8 +513,8 @@ async function runOne(params: {
 
   const run = await api<RunCreateResponse>(daemonUrl, 'POST', '/api/runs', {
     agentId: config.agentId,
-    message: prompt,
-    currentPrompt: prompt,
+    message: runPrompt,
+    currentPrompt: runPrompt,
     projectId,
     conversationId,
     assistantMessageId,
@@ -481,6 +529,24 @@ async function runOne(params: {
   }
 
   const finalStatus = await waitForRun(daemonUrl, run.runId, config.timeoutMs);
+  const assistantText = await readRunAssistantText(daemonUrl, run.runId).catch(() => '');
+  const producedFiles = await api<ProjectFilesResponse>(daemonUrl, 'GET', `/api/projects/${projectId}/files`)
+    .then((body) => body.files ?? [])
+    .catch(() => []);
+  const endedAt = Date.now();
+  await api(daemonUrl, 'PUT', `/api/projects/${projectId}/conversations/${conversationId}/messages/${assistantMessageId}`, {
+    role: 'assistant',
+    content: assistantText,
+    agentId: config.agentId,
+    agentName: config.agentId,
+    runStatus: finalStatus.status,
+    startedAt: now,
+    endedAt,
+    producedFiles,
+    createdAt: now,
+  }).catch((err) => {
+    process.stderr.write(`warning: failed to persist assistant message for ${designSystemId}: ${(err as Error).message || String(err)}\n`);
+  });
   return {
     designSystemId,
     projectId,
