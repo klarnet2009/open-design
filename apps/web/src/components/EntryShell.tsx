@@ -365,25 +365,12 @@ export function EntryShell({
   // project. Browser-only shells fall back to the existing modal
   // path so the user can paste a baseDir.
   async function handleChipFolderImport() {
-    if (!onImportFolder) {
-      setNewProjectOpen(true);
-      return;
-    }
-    const picker =
-      typeof window !== 'undefined' ? window.electronAPI?.pickFolder : undefined;
-    if (typeof picker !== 'function') {
-      // No native picker — open the New Project modal so the user can
-      // paste a baseDir into the existing form.
-      setNewProjectOpen(true);
-      return;
-    }
-    try {
-      const picked = await picker();
-      if (!picked) return;
-      await onImportFolder(picked);
-    } catch {
-      // The picker can reject when the user cancels; silently ignore.
-    }
+    // PR #974 trust boundary: the renderer cannot pick a folder directly
+    // anymore — the bridge exposes `pickAndImport` instead (atomic
+    // pick + HMAC-gated import). On the web (no electronAPI) or when
+    // the bridge is older, fall back to opening the New Project modal
+    // so the user can paste a baseDir manually.
+    setNewProjectOpen(true);
   }
 
   // Dismiss the avatar dropdown on outside-click / Escape so it

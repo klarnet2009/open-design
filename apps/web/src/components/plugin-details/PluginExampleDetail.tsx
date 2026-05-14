@@ -49,8 +49,13 @@ export function PluginExampleDetail({
         : await fetchPluginPreviewHtml(record.id);
       if ('html' in result) {
         setHtml(result.html);
-      } else {
+      } else if ('error' in result) {
         setError(result.error);
+        setHtml(undefined);
+      } else {
+        // unavailable: skill declares a non-HTML preview; treat as a
+        // calm empty state rather than an error (see registry.ts §897).
+        setError(null);
         setHtml(undefined);
       }
     } finally {

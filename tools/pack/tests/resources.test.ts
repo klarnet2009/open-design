@@ -18,6 +18,12 @@ describe("copyBundledResourceTrees", () => {
         "image",
         "sample.json",
       );
+      const designTemplatePath = join(
+        workspaceRoot,
+        "design-templates",
+        "orbit-general",
+        "SKILL.md",
+      );
       const communityPetPath = join(
         workspaceRoot,
         "assets",
@@ -33,6 +39,14 @@ describe("copyBundledResourceTrees", () => {
         "open-design-marketplace.json",
       );
       await mkdir(join(workspaceRoot, "skills", "sample"), { recursive: true });
+      // The skills/design-templates split (see specs/current/
+      // skills-and-design-templates.md) added a separate top-level
+      // `design-templates/` tree that copyBundledResourceTrees now also
+      // bundles. Create it in the fixture so the recursive copy does not
+      // fail with ENOENT before reaching the prompt-templates assertion.
+      await mkdir(join(workspaceRoot, "design-templates", "orbit-general"), {
+        recursive: true,
+      });
       await mkdir(join(workspaceRoot, "design-systems", "sample"), {
         recursive: true,
       });
@@ -48,6 +62,7 @@ describe("copyBundledResourceTrees", () => {
         recursive: true,
       });
       await writeFile(promptTemplatePath, "{\"id\":\"sample\"}\n", "utf8");
+      await writeFile(designTemplatePath, "# Orbit General\n", "utf8");
       await writeFile(communityPetPath, "{\"name\":\"sample\"}\n", "utf8");
       await writeFile(communityRegistryPath, "{\"plugins\":[]}\n", "utf8");
 
@@ -59,6 +74,12 @@ describe("copyBundledResourceTrees", () => {
           "utf8",
         ),
       ).resolves.toBe("{\"id\":\"sample\"}\n");
+      await expect(
+        readFile(
+          join(resourceRoot, "design-templates", "orbit-general", "SKILL.md"),
+          "utf8",
+        ),
+      ).resolves.toBe("# Orbit General\n");
       await expect(
         readFile(
           join(resourceRoot, "community-pets", "sample", "pet.json"),

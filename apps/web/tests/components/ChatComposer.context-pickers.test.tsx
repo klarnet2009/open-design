@@ -107,6 +107,7 @@ function renderComposer(overrides: Partial<ComponentProps<typeof ChatComposer>> 
       onSend={vi.fn()}
       onStop={vi.fn()}
       onOpenMcpSettings={vi.fn()}
+      skills={skills}
       {...overrides}
     />,
   );

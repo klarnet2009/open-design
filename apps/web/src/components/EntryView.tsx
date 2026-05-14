@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ConnectorDetail, ConnectorStatusResponse } from '@open-design/contracts';
+import type {
+  ConnectorDetail,
+  ConnectorStatusResponse,
+  ImportFolderResponse,
+} from '@open-design/contracts';
 import {
   DEFAULT_AUDIO_MODEL,
   DEFAULT_IMAGE_MODEL,
@@ -36,10 +40,18 @@ import type {
 } from '../state/projects';
 
 interface Props {
+  // Union of functional skills + design templates — used for id-based
+  // lookups (DesignsTab project chips, NewProjectPanel skill picker).
+  // The Templates gallery itself reads `designTemplates` instead so it
+  // doesn't accidentally show functional skills as renderable cards.
   skills: SkillSummary[];
+  // Design templates only. Sourced from /api/design-templates. See
+  // specs/current/skills-and-design-templates.md.
+  designTemplates: SkillSummary[];
   designSystems: DesignSystemSummary[];
   projects: Project[];
   templates: ProjectTemplate[];
+  onDeleteTemplate: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
   defaultDesignSystemId: string | null;
   agents: AgentInfo[];
@@ -87,9 +99,11 @@ interface Props {
   ) => Promise<PluginShareProjectOutcome>;
   onImportClaudeDesign: (file: File) => Promise<void> | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
+  onImportFolderResponse?: (response: ImportFolderResponse) => Promise<void> | void;
   onOpenProject: (id: string) => void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => void;
+  onRenameProject: (id: string, name: string) => void;
   onChangeDefaultDesignSystem: (id: string) => void;
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
   onOpenSettings: (section?: 'execution' | 'media' | 'composio' | 'orbit' | 'integrations' | 'mcpClient' | 'language' | 'appearance' | 'notifications' | 'pet' | 'library' | 'about') => void;
@@ -210,9 +224,11 @@ export function sortConnectorsForSearch(
 
 export function EntryView({
   skills,
+  designTemplates,
   designSystems,
   projects,
   templates,
+  onDeleteTemplate,
   promptTemplates,
   defaultDesignSystemId,
   agents,
@@ -234,9 +250,11 @@ export function EntryView({
   onCreatePluginShareProject,
   onImportClaudeDesign,
   onImportFolder,
+  onImportFolderResponse,
   onOpenProject,
   onOpenLiveArtifact,
   onDeleteProject,
+  onRenameProject,
   onChangeDefaultDesignSystem,
   onPersistComposioKey,
   onOpenSettings,

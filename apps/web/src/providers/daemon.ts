@@ -23,7 +23,107 @@ import type {
   SseErrorPayload,
 } from '@open-design/contracts';
 import type { StreamHandlers } from './anthropic';
+
+/**
+ * Returns the front-end carrier that's about to send this request:
+ * - 'desktop' when running inside the Electron shell
+ * - 'web' when running in a regular browser
+ * - 'unknown' in non-browser test environments (jsdom without a UA)
+ *
+ * The daemon uses this to label telemetry traces. Cheap, called once per
+ * run so caching isn't worth the complexity.
+ */
+function detectClientType(): 'desktop' | 'web' | 'unknown' {
+  if (typeof navigator === 'undefined') return 'unknown';
+  const ua = navigator.userAgent ?? '';
+  if (ua.includes('Electron/')) return 'desktop';
+  if (ua) return 'web';
+  return 'unknown';
+}
 import { parseSseFrame } from './sse';
+
+const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
+const LARGE_TOOL_RESULT_CHARS = 8_000;
+const HIGH_INPUT_TOKEN_WARNING_THRESHOLD = 200_000;
+
+export function latestUserPromptFromHistory(history: ChatMessage[]): string {
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const message = history[i];
+    if (message?.role === 'user') return message.content;
+  }
+  return '';
+}
+
+function truncateForTranscript(content: string): string {
+  if (content.length <= MAX_TRANSCRIPT_MESSAGE_CHARS) return content;
+  const omitted = content.length - MAX_TRANSCRIPT_MESSAGE_CHARS;
+  return `${content.slice(0, MAX_TRANSCRIPT_MESSAGE_CHARS)}\n\n[Open Design truncated ${omitted} chars from this prior message before sending it to the agent. Full content remains in persisted history.]`;
+}
+
+function compactInput(input: unknown): string {
+  if (typeof input === 'string') return input;
+  try {
+    return JSON.stringify(input);
+  } catch {
+    return String(input);
+  }
+}
+
+function buildPriorRunContextWarning(history: ChatMessage[]): string | null {
+  let highestInputTokens = 0;
+  let largeToolResults = 0;
+  let sawAgentBrowserCoreDump = false;
+
+  for (const message of history) {
+    for (const event of message.events ?? []) {
+      if (event.kind === 'usage' && typeof event.inputTokens === 'number') {
+        highestInputTokens = Math.max(highestInputTokens, event.inputTokens);
+      }
+      if (event.kind === 'tool_result') {
+        if (event.content.length > LARGE_TOOL_RESULT_CHARS) largeToolResults += 1;
+        if (
+          event.content.includes('agent-browser skills get core') ||
+          event.content.includes('Agent Browser Core') ||
+          event.content.includes('name: core')
+        ) {
+          sawAgentBrowserCoreDump = true;
+        }
+      }
+      if (event.kind === 'tool_use') {
+        const input = compactInput(event.input);
+        if (input.includes('agent-browser skills get core')) {
+          sawAgentBrowserCoreDump = true;
+        }
+      }
+    }
+  }
+
+  const notes: string[] = [];
+  if (highestInputTokens >= HIGH_INPUT_TOKEN_WARNING_THRESHOLD) {
+    notes.push(`a previous run reported ${highestInputTokens} input tokens`);
+  }
+  if (largeToolResults > 0) {
+    notes.push(`${largeToolResults} large prior tool result${largeToolResults === 1 ? '' : 's'} exist only in persisted event history`);
+  }
+  if (sawAgentBrowserCoreDump) {
+    notes.push('agent-browser documentation output was seen earlier; do not replay it into this turn');
+  }
+  if (notes.length === 0) return null;
+
+  return [
+    '## context warning',
+    `Open Design detected ${notes.join(', ')}.`,
+    'Keep this turn compact: summarize prior tool output, read large references from temp files, and quote only task-relevant lines.',
+  ].join('\n');
+}
+
+export function buildDaemonTranscript(history: ChatMessage[]): string {
+  const transcript = history
+    .map((m) => `## ${m.role}\n${truncateForTranscript(m.content.trim())}`)
+    .join('\n\n');
+  const warning = buildPriorRunContextWarning(history);
+  return warning ? `${warning}\n\n${transcript}` : transcript;
+}
 
 export interface DaemonStreamHandlers extends StreamHandlers {
   onAgentEvent: (ev: AgentEvent) => void;
@@ -47,6 +147,10 @@ export interface DaemonStreamOptions {
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
+  // Per-turn skill ids picked via the composer's @-mention popover. These
+  // are layered onto the system prompt for this run only and do not
+  // change the project's persistent `skillId`.
+  skillIds?: string[];
   designSystemId?: string | null;
   // Project-relative paths the user has staged for this turn. The
   // daemon resolves them inside the project folder, validates they
@@ -75,6 +179,19 @@ export interface DaemonReattachOptions {
   onRunEventId?: (eventId: string) => void;
 }
 
+function daemonSseErrorMessage(data: SseErrorPayload): string {
+  const message = String(data.error?.message ?? data.message ?? 'daemon error');
+  const detail =
+    data.error?.details &&
+    typeof data.error.details === 'object' &&
+    !Array.isArray(data.error.details) &&
+    typeof data.error.details.detail === 'string'
+      ? data.error.details.detail
+      : null;
+  if (!detail || detail === message || message.includes(detail)) return message;
+  return `${message}\n${detail}`;
+}
+
 export async function streamViaDaemon({
   agentId,
   history,
@@ -86,6 +203,7 @@ export async function streamViaDaemon({
   assistantMessageId,
   clientRequestId,
   skillId,
+  skillIds,
   designSystemId,
   attachments,
   commentAttachments,
@@ -100,17 +218,17 @@ export async function streamViaDaemon({
   // Local CLIs are single-turn print-mode programs, so we collapse the whole
   // chat into one string. If this becomes too noisy for long histories, the
   // fix is to only include the final user turn.
-  const transcript = history
-    .map((m) => `## ${m.role}\n${m.content.trim()}`)
-    .join('\n\n');
+  const transcript = buildDaemonTranscript(history);
   const request: ChatRequest = {
     agentId,
     message: transcript,
+    currentPrompt: latestUserPromptFromHistory(history),
     projectId: projectId ?? null,
     conversationId: conversationId ?? null,
     assistantMessageId: assistantMessageId ?? null,
     clientRequestId: clientRequestId ?? null,
     skillId: skillId ?? null,
+    skillIds: Array.isArray(skillIds) ? skillIds : [],
     designSystemId: designSystemId ?? null,
     attachments: attachments ?? [],
     commentAttachments: commentAttachments ?? [],
@@ -123,7 +241,14 @@ export async function streamViaDaemon({
   try {
     const createResp = await fetch('/api/runs', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        // Tells the daemon which front-end carrier started the run so the
+        // telemetry trace can be tagged 'client:desktop' vs 'client:web'.
+        // The daemon falls back to a User-Agent sniff when this header is
+        // absent (e.g. third-party clients), so omitting it in tests is OK.
+        'X-OD-Client': detectClientType(),
+      },
       body,
     });
 
@@ -197,6 +322,15 @@ async function consumeDaemonRun({
   let exitCode: number | null = null;
   let exitSignal: string | null = null;
   let endStatus: ChatRunStatus | null = null;
+  // Tracks whether the server explicitly declared `status: 'succeeded'` in
+  // the SSE end payload (or via the fallback run-status fetch). Distinct
+  // from `endStatus === 'succeeded'`, which can be a local fallback when
+  // the SSE end event omits or sends an invalid `status` field. Only the
+  // explicit declaration is allowed to bypass the exit-code/signal safety
+  // net below — a missing-status fallback keeps the old behavior so a
+  // failure response with `{code:1}` or `{code:null,signal:"SIGTERM"}` and
+  // no `status` field still surfaces an error banner.
+  let serverDeclaredSuccess = false;
   let lastEventId: string | null = initialLastEventId ?? null;
   let canceled = false;
   const cancelRun = () => {
@@ -298,13 +432,18 @@ async function consumeDaemonRun({
           if (event.event === 'error') {
             onRunStatus?.('failed');
             const data = event.data as SseErrorPayload;
-            handlers.onError(new Error(String(data.error?.message ?? data.message ?? 'daemon error')));
+            handlers.onError(new Error(daemonSseErrorMessage(data)));
             return;
           }
 
           if (event.event === 'end') {
             exitCode = typeof event.data.code === 'number' ? event.data.code : null;
             exitSignal = typeof event.data.signal === 'string' ? event.data.signal : null;
+            // `serverDeclaredSuccess` records whether the server explicitly
+            // set `status: 'succeeded'` in the end payload — the local
+            // `'succeeded'` fallback below does not count and must keep
+            // hitting the exit-code/signal safety net later.
+            serverDeclaredSuccess = event.data.status === 'succeeded';
             endStatus = isChatRunStatus(event.data.status) ? event.data.status : 'succeeded';
             onRunStatus?.(endStatus);
           }
@@ -319,6 +458,11 @@ async function consumeDaemonRun({
         endStatus = status.status;
         exitCode = status.exitCode ?? null;
         exitSignal = status.signal ?? null;
+        // Fallback REST path: `status.status` is explicitly declared by the
+        // daemon's run record (it passed `isChatRunStatus()` above), so an
+        // explicit `'succeeded'` here is just as authoritative as the SSE
+        // end-event success.
+        serverDeclaredSuccess = status.status === 'succeeded';
         onRunStatus?.(endStatus);
       } else {
         handlers.onError(new Error('daemon stream disconnected before run completed'));
@@ -328,7 +472,24 @@ async function consumeDaemonRun({
 
     if (endStatus === 'canceled') return;
 
-    if (endStatus === 'failed' || exitSignal || (exitCode !== null && exitCode !== 0)) {
+    // Trust the server's authoritative success declaration. When the server
+    // explicitly sets `status: 'succeeded'` (either in the SSE end payload
+    // or via the fallback run-status fetch), the run completed cleanly even
+    // if the underlying process exited via a signal — some agents (e.g.
+    // ACP agents like Devin for Terminal) intentionally exit via SIGTERM
+    // after a clean prompt completion because they don't shut down on
+    // `stdin.end()`. The signal/non-zero-code safety net is bypassed only
+    // for that explicit declaration; a missing/invalid `status` from a
+    // compatible or older daemon still falls back to `endStatus =
+    // 'succeeded'` for the run-status surface but must keep the safety net
+    // intact so a real failure response like `{code:1}` or
+    // `{code:null,signal:"SIGTERM"}` without `status` still surfaces an
+    // error banner.
+    const looksLikeFailure =
+      endStatus === 'failed' ||
+      (!serverDeclaredSuccess &&
+        (exitSignal || (exitCode !== null && exitCode !== 0)));
+    if (looksLikeFailure) {
       const tail = stderrBuf.trim().slice(-400);
       handlers.onError(
         new Error(`agent exited with ${exitSignal ? `signal ${exitSignal}` : `code ${exitCode}`}${tail ? `\n${tail}` : ''}`),
@@ -343,6 +504,15 @@ async function consumeDaemonRun({
 
 function isChatRunStatus(value: unknown): value is ChatRunStatus {
   return value === 'queued' || value === 'running' || value === 'succeeded' || value === 'failed' || value === 'canceled';
+}
+
+function normalizeToolInput(input: unknown): unknown {
+  if (input == null || typeof input !== 'object') return input;
+  const obj = input as Record<string, unknown>;
+  if ('filePath' in obj && typeof obj.filePath === 'string') {
+    return { ...obj, file_path: obj.filePath };
+  }
+  return input;
 }
 
 // Translate a raw `agent` SSE payload (what apps/daemon/src/claude-stream.ts emits)
@@ -396,7 +566,7 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
     };
   }
   if (t === 'tool_use' && typeof data.id === 'string' && typeof data.name === 'string') {
-    return { kind: 'tool_use', id: data.id, name: data.name, input: data.input ?? null };
+    return { kind: 'tool_use', id: data.id, name: data.name, input: normalizeToolInput(data.input) };
   }
   if (t === 'tool_result' && typeof data.toolUseId === 'string') {
     return {

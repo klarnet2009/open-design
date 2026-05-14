@@ -1,5 +1,18 @@
 // @vitest-environment jsdom
 
+// Polyfill scrollTo for jsdom (not available in jsdom's HTMLElement)
+if (typeof HTMLElement.prototype.scrollTo !== 'function') {
+  HTMLElement.prototype.scrollTo = function (
+    options?: ScrollToOptions | number,
+    _y?: number,
+  ) {
+    if (typeof options === 'object' && options !== null) {
+      if (options.top !== undefined) this.scrollTop = options.top;
+      if (options.left !== undefined) this.scrollLeft = options.left;
+    }
+  };
+}
+
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPane } from '../../src/components/ChatPane';
@@ -131,85 +144,60 @@ async function flushFrame() {
   });
 }
 
-async function switchTab(name: 'Chat' | 'Comments') {
-  const tab = screen.getByRole('tab', { name });
-  await act(async () => {
-    fireEvent.click(tab);
-  });
-}
-
-describe('chat scroll preservation across tab switches', () => {
-  it('restores absolute scrollTop when user was scrolled up', async () => {
+describe('chat scroll behavior', () => {
+  it('does not render the removed comments tab beside chat', () => {
     renderChatPane(sampleMessages);
+
+    expect(screen.queryByRole('tab', { name: 'Comments' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Chat' })).toBeNull();
+  });
+
+  it('does not auto-scroll a short scrollback (~90px above bottom) when new content streams in', async () => {
     setGeom({ scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
-
-    // User scrolls up to 200 (well above bottom: distance=400).
-    setUserScroll(200);
-
-    await switchTab('Comments');
-    await switchTab('Chat');
+    const { rerender } = render(chatPaneEl(sampleMessages, null));
+    // Drain the initial-bottom-scroll rAF queued during the first render,
+    // otherwise it fires after our setUserScroll calls and re-pins the
+    // ref to true behind the test's back.
     await flushFrame();
 
-    expect(geom.scrollTop).toBe(200);
-  });
+    // User intentionally scrolls 90px up: distance = 1000 - 510 - 400 = 90.
+    // That's between the 80px auto-follow cutoff and the 120px jump-button
+    // threshold, so the user is deliberately reading slightly earlier
+    // output and should not be yanked to the latest message.
+    setUserScroll(510);
 
-  it('snaps to new scrollHeight when user was pinned to bottom and new content arrived off-tab', async () => {
-    renderChatPane(sampleMessages);
-    setGeom({ scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
-
-    // User is pinned at bottom (distance = 1000 - 600 - 400 = 0 < 50).
-    setUserScroll(600);
-
-    await switchTab('Comments');
-    // While off-tab, new messages would normally grow scrollHeight.
-    setGeom({ scrollHeight: 1500 });
-    await switchTab('Chat');
+    // A new assistant message streams in; scrollHeight grows.
+    const streamed: ChatMessage[] = [
+      ...sampleMessages,
+      { id: 'a3', role: 'assistant', content: 'streaming chunk', createdAt: Date.now() },
+    ];
+    setGeom({ scrollHeight: 1100 });
+    await act(async () => {
+      rerender(chatPaneEl(streamed, null));
+    });
     await flushFrame();
 
-    // Bottom-pinned user lands at scrollHeight, not at the old offset.
-    expect(geom.scrollTop).toBe(1500);
+    // Auto-scroll must respect the user's pause: scrollTop stays where
+    // they put it instead of snapping to the new scrollHeight.
+    expect(geom.scrollTop).toBe(510);
   });
 
-  it('reveals the jump-to-latest button when restored position is no longer near bottom', async () => {
-    renderChatPane(sampleMessages);
-    setGeom({ scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
-
-    // User leaves Chat ~60px from the bottom (distance = 1000 - 540 - 400 = 60).
-    setUserScroll(540);
-    await switchTab('Comments');
-    // While off-tab, new messages stack underneath. scrollHeight grows
-    // dramatically; the saved absolute scrollTop is now hundreds of
-    // pixels above the latest turn.
-    setGeom({ scrollHeight: 2000 });
-    await switchTab('Chat');
-    await flushFrame();
-
-    // Restored to old offset (540), but distance = 2000 - 540 - 400 = 1060
-    // is well past the 120px threshold, so the jump-to-latest button
-    // must be visible immediately, not hidden until the user scrolls.
-    expect(geom.scrollTop).toBe(540);
-    expect(screen.getByRole('button', { name: /jump to latest/i })).toBeTruthy();
-  });
-
-  it('lands new conversation at its own bottom when switching conversations off-tab', async () => {
+  it('lands new conversation at its own bottom when switching conversations', async () => {
     const { rerender } = render(chatPaneEl(sampleMessages, 'conv-A'));
     setGeom({ scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
 
-    // User scrolls up in conversation A and switches to Comments.
+    // User scrolls up in conversation A.
     setUserScroll(150);
-    await switchTab('Comments');
 
-    // While off-tab the active conversation changes to B. Returning to
-    // Chat must land at conversation B's own initial bottom, not at
-    // scrollTop: 0 and not at conversation A's saved offset.
+    // The active conversation changes to B. It must land at conversation
+    // B's own initial bottom, not at scrollTop: 0 and not at conversation
+    // A's saved offset.
     rerender(chatPaneEl(sampleMessages, 'conv-B'));
-    await switchTab('Chat');
     await flushFrame();
 
     // Saved state was cleared by the activeConversationId-reset effect,
-    // and the initial-bottom-scroll effect re-runs with `tab` in its
-    // deps, so the new conversation lands at its own scrollHeight rather
-    // than the browser default 0.
+    // so the new conversation lands at its own scrollHeight rather than
+    // the browser default 0.
     expect(geom.scrollTop).toBe(1000);
   });
 });
