@@ -1001,7 +1001,7 @@ function InlinePromptInput({
     title: label,
   };
 
-  if (shouldRenderSlotAsText(displayValue)) {
+  if (shouldRenderSlotAsText(name, displayValue)) {
     return (
       <span
         {...commonProps}
@@ -1107,7 +1107,8 @@ function inlineFieldType(field: InputFieldSpec): string {
   return raw === 'upload' ? 'file' : raw;
 }
 
-function shouldRenderSlotAsText(value: string): boolean {
+function shouldRenderSlotAsText(name: string, value: string): boolean {
+  if (name === 'pluginGoal') return false;
   return value.length > 18 || /\s/.test(value);
 }
 

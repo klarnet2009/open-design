@@ -562,15 +562,28 @@ function pluginFoldersTouchedThisTurn(
 ): PluginFolderCandidate[] {
   const candidates = getPluginFolderCandidates(projectFiles);
   if (candidates.length === 0) return [];
-  const touchedPaths = [
+  const directTouchedPaths = [
     ...fileOps.flatMap((entry) => [entry.path, entry.fullPath]),
     ...produced.flatMap((file) => [file.name, file.path]),
-    messageContent,
   ].filter((path): path is string => typeof path === "string" && path.length > 0);
-  if (touchedPaths.length === 0) return [];
-  return candidates.filter((folder) =>
+  const touchedPaths = [...directTouchedPaths, messageContent].filter(
+    (path): path is string => typeof path === "string" && path.length > 0,
+  );
+  const explicitFolders = candidates.filter((folder) =>
     touchedPaths.some((path) => pathTouchesFolder(path, folder.path)),
   );
+  if (explicitFolders.length > 0) return explicitFolders;
+  if (candidates.length !== 1) return [];
+  const candidate = candidates[0];
+  if (!candidate) return [];
+  if (
+    directTouchedPaths.some((path) =>
+      pathMatchesFolderFileBasename(path, candidate, projectFiles),
+    )
+  ) {
+    return [candidate];
+  }
+  return hasPluginFinalActionHint(messageContent) ? [candidate] : [];
 }
 
 function pathTouchesFolder(path: string, folderPath: string): boolean {
@@ -579,6 +592,24 @@ function pathTouchesFolder(path: string, folderPath: string): boolean {
     return true;
   }
   return normalized.includes(`/${folderPath}/`) || normalized.includes(`${folderPath}/`);
+}
+
+function pathMatchesFolderFileBasename(
+  path: string,
+  folder: PluginFolderCandidate,
+  projectFiles: ProjectFile[],
+): boolean {
+  const basename = path.replace(/\\/g, "/").split("/").filter(Boolean).pop();
+  if (!basename) return false;
+  return projectFiles.some((file) =>
+    file.name.startsWith(`${folder.path}/`) && file.name.endsWith(`/${basename}`),
+  );
+}
+
+function hasPluginFinalActionHint(content: string): boolean {
+  return /\b(Add to My plugins|Open Design PR|Publish repo|plugin publish|ready to publish|ready to add)\b/i.test(
+    content,
+  );
 }
 
 /**

@@ -134,7 +134,7 @@ describe('AssistantMessage unfinished todo state', () => {
               kind: 'tool_use',
               id: 'write-manifest',
               name: 'Write',
-              input: { path: 'generated-plugin/open-design.json' },
+              input: { path: 'open-design.json' },
             },
             {
               kind: 'tool_result',
@@ -143,7 +143,7 @@ describe('AssistantMessage unfinished todo state', () => {
               isError: false,
             },
           ]),
-          content: 'Generated `generated-plugin/` and it is ready.',
+          content: 'The plugin is ready to publish.',
         }}
         streaming={false}
         projectId="project-1"
