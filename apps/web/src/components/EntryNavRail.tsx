@@ -2,12 +2,12 @@
 //
 // Renders a narrow icon-only column. The first slot is the brand
 // logo (clicking navigates to home), followed by primary
-// actions (new project, home, projects, automations, plugins, design systems, integrations). A small
-// help launcher sits at the bottom and opens a popover with the
-// canonical "ask for help / submit a feature / what's new / download
-// desktop" external links. Language switching and other account-
-// scoped controls live behind the floating settings cog in the
-// top-right corner of the main content.
+// actions (new project, home, projects, automations, design systems).
+// Secondary platform items (plugins, integrations) live in the footer
+// section alongside the help launcher — they are accessible but visually
+// de-emphasised relative to the daily-use primary destinations.
+// Language switching and other account-scoped controls live behind the
+// floating settings cog in the top-right corner of the main content.
 
 import type { ReactNode } from 'react';
 import { EntryHelpMenu } from './EntryHelpMenu';
@@ -111,15 +111,6 @@ export function EntryNavRail({ view, onViewChange, onNewProject }: Props) {
           <Icon name="kanban" size={18} />
         </NavButton>
         <NavButton
-          active={view === 'plugins'}
-          ariaLabel="Plugins"
-          tooltip="Plugins"
-          onClick={() => onViewChange('plugins')}
-          testId="entry-nav-plugins"
-        >
-          <Icon name="grid" size={18} />
-        </NavButton>
-        <NavButton
           active={view === 'design-systems'}
           ariaLabel={t('entry.navDesignSystems')}
           tooltip={t('entry.navDesignSystems')}
@@ -127,6 +118,18 @@ export function EntryNavRail({ view, onViewChange, onNewProject }: Props) {
           testId="entry-nav-design-systems"
         >
           <Icon name="palette" size={18} />
+        </NavButton>
+      </div>
+      <div className="entry-nav-rail__footer">
+        <div className="entry-nav-rail__divider" role="separator" />
+        <NavButton
+          active={view === 'plugins'}
+          ariaLabel="Plugins"
+          tooltip="Plugins"
+          onClick={() => onViewChange('plugins')}
+          testId="entry-nav-plugins"
+        >
+          <Icon name="grid" size={18} />
         </NavButton>
         <NavButton
           active={view === 'integrations'}
@@ -137,8 +140,6 @@ export function EntryNavRail({ view, onViewChange, onNewProject }: Props) {
         >
           <Icon name="link" size={18} />
         </NavButton>
-      </div>
-      <div className="entry-nav-rail__footer">
         <EntryHelpMenu />
       </div>
     </nav>
