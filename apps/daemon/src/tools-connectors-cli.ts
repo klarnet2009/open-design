@@ -1641,7 +1641,12 @@ export async function auditDesignSystemPackage(
   const preservedBuildAssetFiles = files.filter((filePath) => /^build\/.+\.(svg|png|jpe?g|webp|ico)$/iu.test(filePath));
   const preservedFontFiles = files.filter((filePath) => /^fonts\/.+\.(ttf|otf|woff2?|css)$/iu.test(filePath));
   const evidenceComponentNames = sourceComponentNamesFromEvidence(files, evidenceText);
+  const evidenceSurfaceComponentNames = evidenceComponentNames.filter(isSourceSurfaceComponentName);
+  const suggestedComponentNames = evidenceSurfaceComponentNames.length >= 3
+    ? evidenceSurfaceComponentNames
+    : evidenceComponentNames;
   const visualSourceAnchors = await sourceComponentAnchorsInVisualArtifacts(projectPath, files, evidenceComponentNames);
+  const componentPreviewGaps = await sourceComponentPreviewGaps(projectPath, previewFiles, evidenceSurfaceComponentNames);
   const sourceExampleAnchors = sourceComponentExamplesInPackage(files, evidenceComponentNames);
   const hasComponentEvidence = evidenceHasReusableComponents(evidenceText)
     || files.some((filePath) => /^context\/(github|local-code)\/.+\/files\/.+(?:\/|^)(components?|ui|app|layout|shell|navbar|sidebar|chat|input|composer|assistant|message|model)[^/]*\/?.*\.(tsx|ts|jsx|js|css|scss|less)$/iu.test(filePath));
@@ -1759,7 +1764,15 @@ export async function auditDesignSystemPackage(
     addIssue(
       'warning',
       'generic_visual_artifacts',
-      `Source evidence includes ${evidenceComponentNames.length} component snapshots, but preview/UI-kit visuals only reference ${visualSourceAnchors.length} source component name(s). Model or label at least 3 source-backed components such as ${evidenceComponentNames.slice(0, 5).join(', ')}.`,
+      `Source evidence includes ${evidenceComponentNames.length} component snapshots, but preview/UI-kit visuals only reference ${visualSourceAnchors.length} source component name(s). Model or label at least 3 source-backed components such as ${suggestedComponentNames.slice(0, 5).join(', ')}.`,
+      'preview/',
+    );
+  }
+  if (hasComponentEvidence && evidenceSurfaceComponentNames.length >= 3 && componentPreviewGaps.length > 0) {
+    addIssue(
+      'warning',
+      'preview_cards_missing_source_component_context',
+      `Focused component/spacing preview cards should model or label real source components, not only abstract token swatches. Add source-backed examples to ${componentPreviewGaps.slice(0, 6).join(', ')} using components such as ${evidenceSurfaceComponentNames.slice(0, 5).join(', ')}.`,
       'preview/',
     );
   }
@@ -1767,7 +1780,7 @@ export async function auditDesignSystemPackage(
     addIssue(
       'warning',
       'missing_source_component_examples',
-      `Source evidence includes ${evidenceComponentNames.length} component snapshots, but the package preserves only ${sourceExampleAnchors.length} source-backed component example(s) outside context/. Copy at least 3 high-signal examples such as ${evidenceComponentNames.slice(0, 5).join(', ')} into source_examples/, a component examples folder, or root/nested TSX files like Claude Design exports.`,
+      `Source evidence includes ${evidenceComponentNames.length} component snapshots, but the package preserves only ${sourceExampleAnchors.length} source-backed component example(s) outside context/. Copy at least 3 high-signal examples such as ${suggestedComponentNames.slice(0, 5).join(', ')} into source_examples/, a component examples folder, or root/nested TSX files like Claude Design exports.`,
       'source_examples/',
     );
   }
@@ -2048,6 +2061,12 @@ function sourceComponentNameFromPath(filePath: string): string | undefined {
   return name;
 }
 
+function isSourceSurfaceComponentName(name: string): boolean {
+  const normalized = normalizeAnchorText(name);
+  if (normalized.length < 4) return false;
+  return !/(provider|config|constant|theme|token|style|util|hook|store|locale|schema|type|client|server)$/iu.test(normalized);
+}
+
 async function sourceComponentAnchorsInVisualArtifacts(
   projectPath: string,
   files: string[],
@@ -2061,6 +2080,27 @@ async function sourceComponentAnchorsInVisualArtifacts(
   const texts = await Promise.all(visualFiles.map(async (filePath) => await readAuditText(projectPath, filePath) ?? ''));
   const normalizedText = normalizeAnchorText(texts.join('\n'));
   return sourceNames.filter((name) => normalizedText.includes(normalizeAnchorText(name)));
+}
+
+async function sourceComponentPreviewGaps(
+  projectPath: string,
+  previewFiles: string[],
+  sourceNames: string[],
+): Promise<string[]> {
+  if (sourceNames.length === 0) return [];
+  const focusedPreviewFiles = previewFiles.filter((filePath) =>
+    /^preview\/(?:components|spacing)-.+\.html$/u.test(filePath),
+  );
+  const normalizedSourceNames = sourceNames.map(normalizeAnchorText);
+  const missing: string[] = [];
+  for (const filePath of focusedPreviewFiles) {
+    const text = await readAuditText(projectPath, filePath);
+    const normalizedText = normalizeAnchorText(text ?? '');
+    if (!normalizedSourceNames.some((name) => normalizedText.includes(name))) {
+      missing.push(filePath);
+    }
+  }
+  return missing;
 }
 
 function sourceComponentExamplesInPackage(files: string[], sourceNames: string[]): string[] {
