@@ -1662,6 +1662,19 @@ async function auditDesignSystemPackage(
         'ui_kits/app/components/',
       );
     }
+    const appShellFiles = uiKitScriptComponentFiles.filter(isUiKitAppShellComponent);
+    if (appShellFiles.length > 0 && uiKitScriptComponentFiles.length >= 4) {
+      const bestComposition = await bestUiKitAppShellComposition(projectPath, appShellFiles, uiKitScriptComponentFiles);
+      const requiredComposedRoles = Math.min(3, uiKitScriptComponentFiles.length - 1);
+      if (bestComposition.composed.length < requiredComposedRoles) {
+        addIssue(
+          'error',
+          'ui_kit_app_missing_role_composition',
+          `Chat/workspace UI kits need an app shell component that composes at least ${requiredComposedRoles} role component(s) such as Sidebar, AssistantsList, ChatArea, InputBar, or MessageBubble. Found ${bestComposition.composed.length}.`,
+          bestComposition.filePath ?? 'ui_kits/app/components/',
+        );
+      }
+    }
   }
   if (hasComponentEvidence && evidenceComponentNames.length >= 6 && visualSourceAnchors.length < 3) {
     addIssue(
@@ -1855,12 +1868,43 @@ function componentNamesComposedInUiKitIndex(text: string, componentFiles: string
   const textWithoutExternalComponentRefs = text
     .replace(/<script\b[^>]*\bsrc=["'][^"']*components\/[^"']+["'][^>]*>\s*<\/script>/giu, ' ')
     .replace(/components\/[a-z0-9_.-]+/giu, ' ');
+  return componentNamesInText(textWithoutExternalComponentRefs, componentFiles);
+}
+
+function isUiKitAppShellComponent(filePath: string): boolean {
+  return /(^|\/)(app|shell|layout|workspace)\.(jsx|tsx|js|ts)$/iu.test(path.basename(filePath));
+}
+
+async function bestUiKitAppShellComposition(
+  projectPath: string,
+  appShellFiles: string[],
+  componentFiles: string[],
+): Promise<{ filePath?: string; composed: string[] }> {
+  let best: { filePath?: string; composed: string[] } = { composed: [] };
+  for (const filePath of appShellFiles) {
+    const text = await readAuditText(projectPath, filePath);
+    if (text === undefined) continue;
+    const composed = componentNamesComposedInComponentText(text, componentFiles, path.basename(filePath));
+    if (best.filePath === undefined || composed.length > best.composed.length) best = { filePath, composed };
+  }
+  return best;
+}
+
+function componentNamesInText(text: string, componentFiles: string[], excludeBaseName?: string): string[] {
+  const excluded = excludeBaseName?.replace(/\.(jsx|tsx|js|ts)$/iu, '');
   const componentNames = componentFiles
-    .map((filePath) => path.basename(filePath).replace(/\.(jsx|tsx|js|ts)$/iu, ''))
-    .filter((componentName) => componentName.length > 0);
+    .map((filePath) => path.basename(filePath).replace(/\.(jsx|tsx|js|ts|html)$/iu, ''))
+    .filter((componentName) => componentName.length > 0 && componentName !== excluded);
   return componentNames.filter((componentName) =>
-    new RegExp(`\\b${escapeRegExp(componentName)}\\b`, 'u').test(textWithoutExternalComponentRefs),
+    new RegExp(`\\b${escapeRegExp(componentName)}\\b`, 'u').test(text),
   );
+}
+
+function componentNamesComposedInComponentText(text: string, componentFiles: string[], excludeBaseName?: string): string[] {
+  return componentNamesInText(text, componentFiles, excludeBaseName).filter((componentName) => {
+    const escaped = escapeRegExp(componentName);
+    return new RegExp(`<\\s*${escaped}(?:\\s|/|>)|React\\.createElement\\s*\\(\\s*${escaped}\\b|\\b${escaped}\\s*\\(`, 'u').test(text);
+  });
 }
 
 function escapeRegExp(value: string): string {

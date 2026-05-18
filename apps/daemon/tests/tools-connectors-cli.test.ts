@@ -231,6 +231,38 @@ export function ${componentName}({ title = '${componentName}', items = ${compone
 `;
 }
 
+function auditAppComponent(): string {
+  return `const { Sidebar, AssistantsList, ChatArea } = window;
+
+const appStyles = {
+  container: {
+    display: 'flex',
+    width: '100%',
+    minHeight: '720px',
+    background: 'var(--cherry-bg)',
+    color: 'var(--cherry-fg)'
+  }
+};
+
+export function App() {
+  return (
+    <div style={appStyles.container}>
+      <Sidebar />
+      <AssistantsList />
+      <ChatArea />
+    </div>
+  );
+}
+
+window.App = App;
+`;
+}
+
+function auditUiKitComponent(componentName: string): string {
+  const baseName = componentName.replace(/\.(jsx|tsx|js|ts)$/u, '');
+  return baseName === 'App' ? auditAppComponent() : auditComponent(baseName);
+}
+
 describe('connectors tool CLI', () => {
   let stdoutWrite: { mockRestore: () => void };
   let stderrWrite: { mockRestore: () => void };
@@ -528,7 +560,7 @@ describe('connectors tool CLI', () => {
     for (const componentName of AUDIT_COMPONENT_FILES) {
       await writeFile(
         path.join(tmpDir, 'ui_kits/app/components', componentName),
-        auditComponent(componentName.replace(/\.jsx$/u, '')),
+        auditUiKitComponent(componentName),
       );
     }
     await writeFile(path.join(tmpDir, 'assets/logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
@@ -605,7 +637,7 @@ describe('connectors tool CLI', () => {
     for (const componentName of ['Foundation.jsx', 'Navigation.jsx', 'Workspace.jsx']) {
       await writeFile(
         path.join(tmpDir, 'ui_kits/app/components', componentName),
-        auditComponent(componentName.replace(/\.jsx$/u, '')),
+        auditUiKitComponent(componentName),
       );
     }
     await writeFile(path.join(tmpDir, 'context/source-context.md'), '# Design System Source Context\n\n## Local Code\n\n- /tmp/cherry\n');
@@ -707,7 +739,7 @@ describe('connectors tool CLI', () => {
     for (const componentName of ['Foundation.jsx', 'Navigation.jsx', 'Workspace.jsx']) {
       await writeFile(
         path.join(tmpDir, 'ui_kits/app/components', componentName),
-        auditComponent(componentName.replace(/\.jsx$/u, '')),
+        auditUiKitComponent(componentName),
       );
     }
     await writeFile(path.join(tmpDir, 'context/source-context.md'), '# Design System Source Context\n\n## Local Code\n\n- /tmp/cherry\n');
@@ -765,7 +797,7 @@ describe('connectors tool CLI', () => {
     for (const componentName of ['Foundation.jsx', 'Navigation.jsx', 'Workspace.jsx']) {
       await writeFile(
         path.join(tmpDir, 'ui_kits/app/components', componentName),
-        auditComponent(componentName.replace(/\.jsx$/u, '')),
+        auditUiKitComponent(componentName),
       );
     }
     await writeFile(path.join(tmpDir, 'context/source-context.md'), '# Design System Source Context\n\n## Local Code\n\n- /tmp/cherry\n');
@@ -817,7 +849,7 @@ describe('connectors tool CLI', () => {
     for (const componentName of ['App.jsx', 'Sidebar.jsx', 'ChatArea.jsx']) {
       await writeFile(
         path.join(tmpDir, 'ui_kits/app/components', componentName),
-        auditComponent(componentName.replace(/\.jsx$/u, '')),
+        auditUiKitComponent(componentName),
       );
     }
     await writeFile(path.join(tmpDir, 'assets/logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
@@ -841,6 +873,59 @@ describe('connectors tool CLI', () => {
         code: 'missing_ui_kit_component_roles',
         path: 'ui_kits/app/components/',
         message: expect.stringContaining('assistant/list rail'),
+      }),
+    ]));
+
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('fails a design-system package audit when the app shell does not compose role components', async () => {
+    const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'od-package-audit-uncomposed-app-'));
+    process.chdir(tmpDir);
+    await mkdir(path.join(tmpDir, 'preview'), { recursive: true });
+    await mkdir(path.join(tmpDir, 'ui_kits/app/components'), { recursive: true });
+    await mkdir(path.join(tmpDir, 'context/local-code/cherry/files/src/pages/home'), { recursive: true });
+    await writeFile(path.join(tmpDir, 'DESIGN.md'), AUDIT_DESIGN_MD);
+    await writeFile(path.join(tmpDir, 'README.md'), AUDIT_README);
+    await writeFile(path.join(tmpDir, 'SKILL.md'), AUDIT_SKILL);
+    await writeFile(path.join(tmpDir, 'colors_and_type.css'), AUDIT_TOKENS_CSS);
+    for (const fileName of [
+      'colors-primary.html',
+      'colors-theme-light.html',
+      'typography-specimens.html',
+      'spacing-tokens.html',
+      'components-buttons.html',
+      'brand-assets.html',
+    ]) {
+      await writeFile(path.join(tmpDir, 'preview', fileName), auditHtml(fileName));
+    }
+    await writeFile(path.join(tmpDir, 'ui_kits/app/index.html'), auditUiKitIndex());
+    await writeFile(path.join(tmpDir, 'ui_kits/app/README.md'), '# UI kit\n');
+    for (const componentName of AUDIT_COMPONENT_FILES) {
+      await writeFile(
+        path.join(tmpDir, 'ui_kits/app/components', componentName),
+        componentName === 'App.jsx' ? auditComponent('App') : auditUiKitComponent(componentName),
+      );
+    }
+    await writeFile(path.join(tmpDir, 'context/source-context.md'), '# Design System Source Context\n\n## Local Code\n\n- /tmp/cherry\n');
+    await writeFile(path.join(tmpDir, 'context/local-code/cherry.md'), [
+      '# Local Design Evidence: cherry',
+      '',
+      'Snapshot files written: 1',
+      '',
+      '### Chat and input surfaces',
+      '- src/pages/home/Chat.tsx -> `context/local-code/cherry/files/src/pages/home/Chat.tsx` (source)',
+    ].join('\n'));
+    await writeFile(path.join(tmpDir, 'context/local-code/cherry/files/src/pages/home/Chat.tsx'), 'export function Chat(){ return <main><InputBar /><Messages /></main>; }');
+
+    const result = await runConnectorsToolCli(['design-system-package-audit', '--path', tmpDir]);
+
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(stdoutOutput.join('')).errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'ui_kit_app_missing_role_composition',
+        path: 'ui_kits/app/components/App.jsx',
+        message: expect.stringContaining('Sidebar, AssistantsList, ChatArea'),
       }),
     ]));
 
@@ -875,7 +960,7 @@ describe('connectors tool CLI', () => {
     for (const componentName of AUDIT_COMPONENT_FILES) {
       await writeFile(
         path.join(tmpDir, 'ui_kits/app/components', componentName),
-        auditComponent(componentName.replace(/\.jsx$/u, '')),
+        auditUiKitComponent(componentName),
       );
     }
     await writeFile(path.join(tmpDir, 'assets/logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
@@ -939,7 +1024,7 @@ describe('connectors tool CLI', () => {
     for (const componentName of ['Foundation.jsx', 'Navigation.jsx', 'Workspace.jsx']) {
       await writeFile(
         path.join(tmpDir, 'ui_kits/app/components', componentName),
-        auditComponent(componentName.replace(/\.jsx$/u, '')),
+        auditUiKitComponent(componentName),
       );
     }
     await writeFile(path.join(tmpDir, 'context/source-context.md'), '# Design System Source Context\n\n## Local Code\n\n- /tmp/cherry\n');
@@ -1052,7 +1137,7 @@ describe('connectors tool CLI', () => {
     for (const componentName of AUDIT_COMPONENT_FILES) {
       await writeFile(
         path.join(tmpDir, 'ui_kits/app/components', componentName),
-        auditComponent(componentName.replace(/\.jsx$/u, '')),
+        auditUiKitComponent(componentName),
       );
     }
     await writeFile(path.join(tmpDir, 'assets/logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
