@@ -179,7 +179,14 @@ describe('design systems registry', () => {
       path.join(root, 'legacy', 'DESIGN.md'),
       '# Legacy System\n\n> Category: Custom\n> Surface: web\n\nLegacy body.\n',
     );
-    await writeFile(path.join(root, 'legacy', 'README.md'), '# Legacy\n');
+    await writeFile(
+      path.join(root, 'legacy', 'README.md'),
+      '# Legacy\n\nReview preview/typography-scale.html and ui_kits/generated_interface/index.html first.\n',
+    );
+    await writeFile(
+      path.join(root, 'legacy', 'SKILL.md'),
+      '# Legacy Skill\n\nUse preview/colors-ui-palette.html, preview/spacing-system.html, and ui_kits/generated_interface/.\n',
+    );
     await writeFile(path.join(root, 'legacy', 'preview', 'colors-ui-palette.html'), '<!doctype html><html><body>colors</body></html>');
     await writeFile(path.join(root, 'legacy', 'preview', 'colors-node-types.html'), '<!doctype html><html><body>nodes</body></html>');
     await writeFile(path.join(root, 'legacy', 'preview', 'typography-scale.html'), '<!doctype html><html><body>type</body></html>');
@@ -228,6 +235,21 @@ describe('design systems registry', () => {
       .resolves
       .toMatchObject({
         content: expect.stringContaining('legacy app kit'),
+      });
+    await expect(readUserDesignSystemFile(root, 'user:legacy', 'README.md'))
+      .resolves
+      .toMatchObject({
+        content: expect.not.stringContaining('ui_kits/generated_interface'),
+      });
+    await expect(readUserDesignSystemFile(root, 'user:legacy', 'README.md'))
+      .resolves
+      .toMatchObject({
+        content: expect.stringContaining('ui_kits/app/index.html'),
+      });
+    await expect(readUserDesignSystemFile(root, 'user:legacy', 'SKILL.md'))
+      .resolves
+      .toMatchObject({
+        content: expect.not.stringContaining('preview/colors-ui-palette.html'),
       });
   });
 

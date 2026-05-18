@@ -1508,6 +1508,19 @@ async function auditDesignSystemPackage(
   await requireContent('README.md', 600, 'thin_readme', 'README.md is too thin to explain the package, source evidence, generated files, and reuse workflow.', requireMarkdownHeading);
   await requireContent('SKILL.md', 500, 'thin_skill', 'SKILL.md is too thin to guide future agents on how to use this design system.', validateSkillInstructions);
   await requireContent('colors_and_type.css', 500, 'thin_token_css', 'colors_and_type.css is too thin to carry reusable color, typography, spacing, radius, and state tokens.', validateTokenCss);
+  for (const docPath of ['DESIGN.md', 'README.md', 'SKILL.md', 'ui_kits/app/README.md']) {
+    if (!fileSet.has(docPath)) continue;
+    const text = await readAuditText(projectPath, docPath);
+    const staleReferences = text ? stalePackageReferences(text) : [];
+    if (staleReferences.length > 0) {
+      addIssue(
+        options.referencePackage === true ? 'warning' : 'error',
+        'stale_package_manifest_references',
+        `Package documentation still references old scaffold paths: ${staleReferences.join(', ')}. Rewrite it to point at preview/* focused cards and ui_kits/app/.`,
+        docPath,
+      );
+    }
+  }
 
   const previewFiles = files.filter((filePath) => /^preview\/.+\.html$/u.test(filePath));
   if (previewFiles.length < 6) {
@@ -1701,6 +1714,23 @@ function validateHtmlDocument(text: string): string | undefined {
   if (!/<style[\s>]/iu.test(text)) return 'Expected embedded CSS styles for review fidelity.';
   if (!/<(main|section|article|aside|header|div)\b/iu.test(text)) return 'Expected real layout markup, not only metadata.';
   return undefined;
+}
+
+function stalePackageReferences(text: string): string[] {
+  const stalePreviewPaths = [
+    'preview/colors-node-types.html',
+    'preview/colors-ui-palette.html',
+    'preview/typography-scale.html',
+    'preview/spacing-system.html',
+    'preview/logo-variants.html',
+  ];
+  const references = stalePreviewPaths.filter((stalePath) => text.includes(stalePath));
+  if (text.includes('ui_kits/generated_interface/index.html')) {
+    references.push('ui_kits/generated_interface/index.html');
+  } else if (text.includes('ui_kits/generated_interface')) {
+    references.push('ui_kits/generated_interface/');
+  }
+  return references;
 }
 
 function manifestHasLinkedGithub(manifest: string): boolean {

@@ -83,6 +83,12 @@ describe('project design system route gates', () => {
     expect(resp.status).toBe(200);
   }
 
+  async function readProjectText(projectId: string, name: string) {
+    const resp = await fetch(`${baseUrl}/api/projects/${encodeURIComponent(projectId)}/files/${name}`);
+    expect(resp.status).toBe(200);
+    return resp.text();
+  }
+
   it('rejects draft design systems when creating a project', async () => {
     const draft = await createUserDesignSystem('draft');
     const id = uniqueId('project-draft-ds');
@@ -202,6 +208,46 @@ describe('project design system route gates', () => {
       'preview/colors-ui-palette.html',
       'ui_kits/generated_interface/index.html',
     ]));
+  });
+
+  it('refreshes stale design-system workspace docs that still point at legacy package paths', async () => {
+    const draft = await createUserDesignSystem('draft');
+
+    const workspaceResp = await fetch(
+      `${baseUrl}/api/design-systems/${encodeURIComponent(draft.id)}/workspace`,
+      { method: 'POST' },
+    );
+    expect(workspaceResp.status).toBe(201);
+    const workspaceBody = (await workspaceResp.json()) as {
+      project: { id: string };
+    };
+    const projectId = workspaceBody.project.id;
+    projectsToClean.push(projectId);
+
+    await writeProjectText(
+      projectId,
+      'README.md',
+      '# Stale README\n\nReview preview/typography-scale.html and ui_kits/generated_interface/index.html.\n',
+    );
+    await writeProjectText(
+      projectId,
+      'SKILL.md',
+      '# Stale Skill\n\nUse preview/colors-ui-palette.html and ui_kits/generated_interface/.\n',
+    );
+
+    const reopenedResp = await fetch(
+      `${baseUrl}/api/design-systems/${encodeURIComponent(draft.id)}/workspace`,
+      { method: 'POST' },
+    );
+    expect(reopenedResp.status).toBe(201);
+
+    const readme = await readProjectText(projectId, 'README.md');
+    const skill = await readProjectText(projectId, 'SKILL.md');
+    expect(readme).toContain('preview/');
+    expect(readme).not.toContain('ui_kits/generated_interface');
+    expect(readme).not.toContain('preview/typography-scale.html');
+    expect(skill).not.toContain('ui_kits/generated_interface');
+    expect(skill).not.toContain('preview/colors-ui-palette.html');
   });
 
   it('rejects patching an existing project to a draft design system', async () => {

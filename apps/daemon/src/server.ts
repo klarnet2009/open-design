@@ -2770,7 +2770,7 @@ export async function startServer({
       if (existing) {
         try {
           const existingFile = await readProjectFile(PROJECTS_DIR, projectId, detail.path, project.metadata);
-          if (!isReplaceableDesignSystemWorkspaceScaffold(detail.path, existingFile)) continue;
+          if (!isReplaceableDesignSystemWorkspaceFile(detail.path, existingFile)) continue;
         } catch (err) {
           if (!err || err.code !== 'ENOENT') throw err;
         }
@@ -2790,11 +2790,21 @@ export async function startServer({
     return { project, files: projectFiles };
   }
 
-  function isReplaceableDesignSystemWorkspaceScaffold(filePath, file) {
-    if (!/^ui_kits\/app\/components\/.+\.(jsx|tsx|js|ts|css|html)$/u.test(filePath)) return false;
+  function isReplaceableDesignSystemWorkspaceFile(filePath, file) {
     const buffer = file?.buffer;
-    if (!Buffer.isBuffer(buffer) || buffer.length >= 700) return false;
-    return /od-ui-kit-[a-z-]+/u.test(buffer.toString('utf8'));
+    if (!Buffer.isBuffer(buffer)) return false;
+    const text = buffer.toString('utf8');
+    if (/^ui_kits\/app\/components\/.+\.(jsx|tsx|js|ts|css|html)$/u.test(filePath)) {
+      return buffer.length < 700 && /od-ui-kit-[a-z-]+/u.test(text);
+    }
+    if (!/^(DESIGN\.md|README\.md|SKILL\.md|ui_kits\/app\/README\.md)$/u.test(filePath)) {
+      return false;
+    }
+    return hasLegacyDesignSystemPackageReferences(text);
+  }
+
+  function hasLegacyDesignSystemPackageReferences(text) {
+    return /preview\/(colors-node-types|colors-ui-palette|typography-scale|spacing-system|logo-variants)\.html|ui_kits\/generated_interface(?:\/index\.html|\/)?/u.test(text);
   }
 
   async function removeLegacyDesignSystemWorkspaceArtifacts(project) {

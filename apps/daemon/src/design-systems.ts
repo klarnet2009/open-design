@@ -657,6 +657,7 @@ async function migrateLegacyDesignSystemPackage(
   const appKitExists = await fileExists(path.join(dir, 'ui_kits', 'app', 'index.html'));
   const hasLegacyArtifacts = await hasAnyLegacyDesignSystemArtifact(dir);
   if (!hasLegacyArtifacts && !migratedArtifacts.some(Boolean)) {
+    await rewriteLegacyPackageDocumentationReferences(dir);
     if (appKitExists) await writeDefaultUiKitComponentsIfMissing(dir, title);
     return;
   }
@@ -680,7 +681,30 @@ async function migrateLegacyDesignSystemPackage(
       ? writeDefaultUiKitComponentsIfMissing(dir, title)
       : Promise.resolve(false),
   ]);
+  await rewriteLegacyPackageDocumentationReferences(dir);
   await removeLegacyDesignSystemArtifacts(dir);
+}
+
+async function rewriteLegacyPackageDocumentationReferences(dir: string): Promise<void> {
+  await Promise.all(['DESIGN.md', 'README.md', 'SKILL.md', 'ui_kits/app/README.md'].map(async (relativePath) => {
+    const target = path.join(dir, ...relativePath.split('/'));
+    const current = await readFileOptional(target);
+    if (current === undefined) return;
+    const next = rewriteLegacyPackageReferences(current);
+    if (next !== current) await writeFile(target, next, 'utf8');
+  }));
+}
+
+function rewriteLegacyPackageReferences(text: string): string {
+  return text
+    .replaceAll('preview/colors-ui-palette.html', 'preview/colors-primary.html')
+    .replaceAll('preview/colors-node-types.html', 'preview/colors-theme-light.html and preview/colors-theme-dark.html')
+    .replaceAll('preview/typography-scale.html', 'preview/typography-specimens.html')
+    .replaceAll('preview/spacing-system.html', 'preview/spacing-tokens.html, preview/spacing-radius.html, and preview/spacing-shadows.html')
+    .replaceAll('preview/logo-variants.html', 'preview/brand-assets.html')
+    .replaceAll('ui_kits/generated_interface/index.html', 'ui_kits/app/index.html')
+    .replaceAll('ui_kits/generated_interface/', 'ui_kits/app/')
+    .replaceAll('ui_kits/generated_interface', 'ui_kits/app');
 }
 
 async function writeDefaultUiKitComponentsIfMissing(dir: string, title: string): Promise<boolean> {

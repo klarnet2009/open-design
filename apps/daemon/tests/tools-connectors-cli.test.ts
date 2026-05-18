@@ -531,6 +531,62 @@ describe('connectors tool CLI', () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
+  it('fails a design-system package audit when manifest docs point at old scaffold paths', async () => {
+    const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'od-package-audit-stale-docs-'));
+    process.chdir(tmpDir);
+    await mkdir(path.join(tmpDir, 'preview'), { recursive: true });
+    await mkdir(path.join(tmpDir, 'ui_kits/app/components'), { recursive: true });
+    await mkdir(path.join(tmpDir, 'context/local-code/cherry/files/src/components'), { recursive: true });
+    await writeFile(path.join(tmpDir, 'DESIGN.md'), AUDIT_DESIGN_MD);
+    await writeFile(
+      path.join(tmpDir, 'README.md'),
+      `${AUDIT_README}\n\nLegacy review paths still mention preview/typography-scale.html and ui_kits/generated_interface/index.html.\n`,
+    );
+    await writeFile(path.join(tmpDir, 'SKILL.md'), AUDIT_SKILL);
+    await writeFile(path.join(tmpDir, 'colors_and_type.css'), AUDIT_TOKENS_CSS);
+    for (const fileName of [
+      'colors-primary.html',
+      'colors-theme-light.html',
+      'typography-specimens.html',
+      'spacing-tokens.html',
+      'components-buttons.html',
+      'brand-assets.html',
+    ]) {
+      await writeFile(path.join(tmpDir, 'preview', fileName), auditHtml(fileName));
+    }
+    await writeFile(path.join(tmpDir, 'ui_kits/app/index.html'), auditHtml('Cherry Studio UI kit'));
+    await writeFile(path.join(tmpDir, 'ui_kits/app/README.md'), '# UI kit\n\nUse ui_kits/app/index.html and role components.\n');
+    for (const componentName of AUDIT_COMPONENT_FILES) {
+      await writeFile(
+        path.join(tmpDir, 'ui_kits/app/components', componentName),
+        auditComponent(componentName.replace(/\.jsx$/u, '')),
+      );
+    }
+    await writeFile(path.join(tmpDir, 'context/source-context.md'), '# Design System Source Context\n\n## Local Code\n\n- /tmp/cherry\n');
+    await writeFile(path.join(tmpDir, 'context/local-code/cherry.md'), [
+      '# Local Design Evidence: cherry',
+      '',
+      'Snapshot files written: 1',
+      '',
+      '### Reusable components',
+      '- src/components/Button.tsx -> `context/local-code/cherry/files/src/components/Button.tsx` (source)',
+    ].join('\n'));
+    await writeFile(path.join(tmpDir, 'context/local-code/cherry/files/src/components/Button.tsx'), 'export function Button(){ return <button />; }');
+
+    const result = await runConnectorsToolCli(['design-system-package-audit', '--path', tmpDir]);
+
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(stdoutOutput.join('')).errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'stale_package_manifest_references',
+        path: 'README.md',
+        message: expect.stringContaining('preview/typography-scale.html'),
+      }),
+    ]));
+
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
   it('fails a design-system package audit when modular UI-kit components are placeholders', async () => {
     const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'od-package-audit-thin-components-'));
     process.chdir(tmpDir);
