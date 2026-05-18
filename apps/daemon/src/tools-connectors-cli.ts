@@ -1562,6 +1562,17 @@ async function auditDesignSystemPackage(
       'ui_kits/app/components/',
     );
   }
+  if (hasComponentEvidence && uiKitComponentFiles.length >= 3) {
+    const componentByteTotal = await totalAuditBytes(projectPath, uiKitComponentFiles);
+    if (componentByteTotal < 3000) {
+      addIssue(
+        'error',
+        'thin_modular_ui_kit',
+        `ui_kits/app/components/ is too thin for source-backed component evidence; expected at least 3000 bytes across reusable components, found ${componentByteTotal}.`,
+        'ui_kits/app/components/',
+      );
+    }
+  }
   if (hasAssetEvidence) {
     if (!files.some((filePath) => /^assets\/.+\.(svg|png|jpe?g|webp|ico)$/iu.test(filePath))) {
       addIssue('error', 'missing_preserved_assets', 'Source evidence includes brand assets; preserve selected logos/icons/avatars under assets/.', 'assets/');
@@ -1603,6 +1614,19 @@ async function readAuditText(projectPath: string, relativePath: string): Promise
   } catch {
     return undefined;
   }
+}
+
+async function totalAuditBytes(projectPath: string, relativePaths: string[]): Promise<number> {
+  let total = 0;
+  for (const relativePath of relativePaths) {
+    try {
+      const info = await stat(path.join(projectPath, relativePath));
+      if (info.isFile()) total += info.size;
+    } catch {
+      // Missing files are reported by the caller's structural checks.
+    }
+  }
+  return total;
 }
 
 function requireMarkdownHeading(text: string): string | undefined {

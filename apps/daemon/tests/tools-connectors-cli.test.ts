@@ -141,6 +141,41 @@ function auditHtml(title: string): string {
 `;
 }
 
+function auditComponent(componentName: string): string {
+  return `const ${componentName}Items = [
+  { id: 'primary', label: '${componentName} primary state', detail: 'Source-backed density, spacing, and active state.' },
+  { id: 'secondary', label: '${componentName} secondary state', detail: 'Muted state with compact metadata and clear affordance.' },
+  { id: 'review', label: '${componentName} review state', detail: 'Reusable review surface for future Open Design projects.' },
+];
+
+const ${componentName}Styles = {
+  shell: { display: 'grid', gap: 12, padding: 16, border: '1px solid var(--cherry-border)', borderRadius: 12, background: 'var(--cherry-surface)' },
+  header: { display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' },
+  row: { display: 'grid', gap: 4, padding: '10px 12px', borderRadius: 10, background: 'var(--cherry-surface-muted)' },
+  label: { fontWeight: 700, color: 'var(--cherry-fg)' },
+  detail: { color: 'var(--cherry-muted)', fontSize: 13 },
+  action: { border: '1px solid var(--cherry-primary)', background: 'var(--cherry-primary)', color: '#fff', borderRadius: 8, padding: '8px 10px' },
+};
+
+export function ${componentName}({ title = '${componentName}', items = ${componentName}Items }) {
+  return (
+    <section style={${componentName}Styles.shell}>
+      <header style={${componentName}Styles.header}>
+        <strong>{title}</strong>
+        <button type="button" style={${componentName}Styles.action}>Review</button>
+      </header>
+      {items.map((item) => (
+        <article key={item.id} style={${componentName}Styles.row}>
+          <span style={${componentName}Styles.label}>{item.label}</span>
+          <span style={${componentName}Styles.detail}>{item.detail}</span>
+        </article>
+      ))}
+    </section>
+  );
+}
+`;
+}
+
 describe('connectors tool CLI', () => {
   let stdoutWrite: { mockRestore: () => void };
   let stderrWrite: { mockRestore: () => void };
@@ -388,7 +423,7 @@ describe('connectors tool CLI', () => {
     for (const componentName of ['App.jsx', 'Sidebar.jsx', 'ChatArea.jsx']) {
       await writeFile(
         path.join(tmpDir, 'ui_kits/app/components', componentName),
-        `export function ${componentName.replace(/\.jsx$/u, '')}(){ return <section>${componentName}</section>; }\n`,
+        auditComponent(componentName.replace(/\.jsx$/u, '')),
       );
     }
     await writeFile(path.join(tmpDir, 'assets/logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
@@ -429,6 +464,55 @@ describe('connectors tool CLI', () => {
       ok: true,
       errors: [],
     });
+
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('fails a design-system package audit when modular UI-kit components are placeholders', async () => {
+    const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'od-package-audit-thin-components-'));
+    process.chdir(tmpDir);
+    await mkdir(path.join(tmpDir, 'preview'), { recursive: true });
+    await mkdir(path.join(tmpDir, 'ui_kits/app/components'), { recursive: true });
+    await mkdir(path.join(tmpDir, 'context/local-code/cherry/files/src/components'), { recursive: true });
+    await writeFile(path.join(tmpDir, 'DESIGN.md'), AUDIT_DESIGN_MD);
+    await writeFile(path.join(tmpDir, 'README.md'), AUDIT_README);
+    await writeFile(path.join(tmpDir, 'SKILL.md'), AUDIT_SKILL);
+    await writeFile(path.join(tmpDir, 'colors_and_type.css'), AUDIT_TOKENS_CSS);
+    for (const fileName of [
+      'colors-primary.html',
+      'colors-theme-light.html',
+      'typography-specimens.html',
+      'spacing-tokens.html',
+      'components-buttons.html',
+      'brand-assets.html',
+    ]) {
+      await writeFile(path.join(tmpDir, 'preview', fileName), auditHtml(fileName));
+    }
+    await writeFile(path.join(tmpDir, 'ui_kits/app/index.html'), auditHtml('Cherry Studio UI kit'));
+    await writeFile(path.join(tmpDir, 'ui_kits/app/README.md'), '# UI kit\n');
+    for (const componentName of ['App.jsx', 'Sidebar.jsx', 'ChatArea.jsx']) {
+      await writeFile(
+        path.join(tmpDir, 'ui_kits/app/components', componentName),
+        `export function ${componentName.replace(/\.jsx$/u, '')}(){ return <section>${componentName}</section>; }\n`,
+      );
+    }
+    await writeFile(path.join(tmpDir, 'context/source-context.md'), '# Design System Source Context\n\n## Local Code\n\n- /tmp/cherry\n');
+    await writeFile(path.join(tmpDir, 'context/local-code/cherry.md'), [
+      '# Local Design Evidence: cherry',
+      '',
+      'Snapshot files written: 1',
+      '',
+      '### Reusable components',
+      '- src/components/Button.tsx -> `context/local-code/cherry/files/src/components/Button.tsx` (source)',
+    ].join('\n'));
+    await writeFile(path.join(tmpDir, 'context/local-code/cherry/files/src/components/Button.tsx'), 'export function Button(){ return <button />; }');
+
+    const result = await runConnectorsToolCli(['design-system-package-audit', '--path', tmpDir]);
+
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(stdoutOutput.join('')).errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'thin_modular_ui_kit', path: 'ui_kits/app/components/' }),
+    ]));
 
     await rm(tmpDir, { recursive: true, force: true });
   });
@@ -499,7 +583,7 @@ describe('connectors tool CLI', () => {
     for (const componentName of ['App.jsx', 'Sidebar.jsx', 'ChatArea.jsx']) {
       await writeFile(
         path.join(tmpDir, 'ui_kits/app/components', componentName),
-        `export function ${componentName.replace(/\.jsx$/u, '')}(){ return <section>${componentName}</section>; }\n`,
+        auditComponent(componentName.replace(/\.jsx$/u, '')),
       );
     }
     await writeFile(path.join(tmpDir, 'assets/logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));

@@ -249,7 +249,7 @@ describe('design systems registry', () => {
     await expect(readUserDesignSystemFile(root, 'user:legacy', 'ui_kits/app/components/App.jsx'))
       .resolves
       .toMatchObject({
-        content: expect.stringContaining('Composes the workspace shell'),
+        content: expect.stringContaining('Design system workspace'),
       });
   });
 

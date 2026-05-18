@@ -2769,8 +2769,8 @@ export async function startServer({
       if (!detail) continue;
       if (existing) {
         try {
-          await readProjectFile(PROJECTS_DIR, projectId, detail.path, project.metadata);
-          continue;
+          const existingFile = await readProjectFile(PROJECTS_DIR, projectId, detail.path, project.metadata);
+          if (!isReplaceableDesignSystemWorkspaceScaffold(detail.path, existingFile)) continue;
         } catch (err) {
           if (!err || err.code !== 'ENOENT') throw err;
         }
@@ -2788,6 +2788,13 @@ export async function startServer({
     await linkUserDesignSystemProject(USER_DESIGN_SYSTEMS_DIR, id, project.id);
     const projectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: project.metadata });
     return { project, files: projectFiles };
+  }
+
+  function isReplaceableDesignSystemWorkspaceScaffold(filePath, file) {
+    if (!/^ui_kits\/app\/components\/.+\.(jsx|tsx|js|ts|css|html)$/u.test(filePath)) return false;
+    const buffer = file?.buffer;
+    if (!Buffer.isBuffer(buffer) || buffer.length >= 700) return false;
+    return /od-ui-kit-[a-z-]+/u.test(buffer.toString('utf8'));
   }
 
   async function removeLegacyDesignSystemWorkspaceArtifacts(project) {
