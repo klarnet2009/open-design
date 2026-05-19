@@ -2,6 +2,7 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -51,6 +52,17 @@ const USER_PLUGIN_SOURCE_KINDS = new Set<PluginSourceKind>([
   'url',
   'local',
 ]);
+
+const COMPOSER_TEXTAREA_MIN_HEIGHT = 88;
+const COMPOSER_TEXTAREA_MAX_HEIGHT = 184;
+
+function composerTextareaMaxHeight(): number {
+  if (typeof window === 'undefined') return COMPOSER_TEXTAREA_MAX_HEIGHT;
+  return Math.max(
+    COMPOSER_TEXTAREA_MIN_HEIGHT,
+    Math.min(COMPOSER_TEXTAREA_MAX_HEIGHT, Math.round(window.innerHeight * 0.34)),
+  );
+}
 
 interface SlashCommand {
   id: string;
@@ -355,6 +367,32 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       () => buildInlineMentionParts(draft, composerMentionEntities),
       [composerMentionEntities, draft],
     );
+
+    function resizeTextarea() {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      const maxHeight = composerTextareaMaxHeight();
+      ta.style.height = 'auto';
+      const nextHeight = Math.min(
+        Math.max(ta.scrollHeight, COMPOSER_TEXTAREA_MIN_HEIGHT),
+        maxHeight,
+      );
+      ta.style.height = `${nextHeight}px`;
+      ta.style.overflowY = ta.scrollHeight > maxHeight ? 'auto' : 'hidden';
+    }
+
+    useLayoutEffect(() => {
+      resizeTextarea();
+    }, [draft, composerMentionParts, staged.length, stagedSkills.length]);
+
+    useEffect(() => {
+      function onResize() {
+        resizeTextarea();
+      }
+      window.addEventListener('resize', onResize);
+      return () => window.removeEventListener('resize', onResize);
+    }, []);
+
     useEffect(() => {
       setComposerScrollTop(textareaRef.current?.scrollTop ?? 0);
     }, [composerMentionParts, draft]);
@@ -1246,7 +1284,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 aria-expanded={toolsOpen}
                 aria-label={t('chat.cliSettingsAria')}
               >
-                <Icon name="sliders" size={15} />
+                <span className="composer-tools-at" aria-hidden>
+                  @
+                </span>
               </button>
               {toolsOpen ? (
                 <div
@@ -1465,7 +1505,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           </div>
         </div>
         {uploadError ? <span className="composer-hint">{uploadError}</span> : null}
-        <span className="composer-hint">{t('chat.composerHint')}</span>
         {detailsRecord ? (
           <PluginDetailsModal
             record={detailsRecord}

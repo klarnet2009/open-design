@@ -1113,7 +1113,7 @@ export const en: Dict = {
   'chat.copyPrompt': 'Copy prompt',
   'chat.copyDone': 'Copied!',
   'chat.composerPlaceholder':
-    'Describe the design you want — paste or drop images, or @ a file or skill…',
+    'Describe the design you want — paste images, @ files or skills, or / for commands…',
   'chat.composerHint':
     '⌘/Ctrl + Enter to send · paste images · @ files or skills · / for commands',
   'chat.cliSettingsTitle': 'CLI & model settings',
@@ -1300,7 +1300,7 @@ export const en: Dict = {
   'fileViewer.saveDisabled': 'Save (read-only viewer)',
   'fileViewer.save': 'Save',
   'fileViewer.preview': 'Preview',
-  'fileViewer.source': 'Source',
+  'fileViewer.source': 'Code',
   'fileViewer.tweaks': 'Tweaks',
   'fileViewer.comment': 'Comment',
   'fileViewer.edit': 'Edit',
