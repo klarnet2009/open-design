@@ -210,7 +210,7 @@ export function DesignSystemsTab({
         <div className="ds-settings-card__head">
           <div>
             <span className="ds-manager-eyebrow">Design Systems</span>
-            <h2>Design systems</h2>
+            <h2>Your systems</h2>
           </div>
           <select
             aria-label="Filter design systems"
@@ -335,7 +335,7 @@ export function DesignSystemsTab({
         <div className="ds-settings-card__head">
           <div>
             <span className="ds-manager-eyebrow">Library</span>
-            <h2>Built-in design systems</h2>
+            <h2>Built-in library</h2>
           </div>
         </div>
         <div className="tab-panel-toolbar ds-manager-toolbar">
