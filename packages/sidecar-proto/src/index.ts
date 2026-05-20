@@ -72,6 +72,7 @@ export const SIDECAR_MESSAGES = Object.freeze({
   CLICK: "click",
   CONSOLE: "console",
   EVAL: "eval",
+  EVENT: "event",
   EXPORT_PDF: "export-pdf",
   REGISTER_DESKTOP_AUTH: "register-desktop-auth",
   SCREENSHOT: "screenshot",
@@ -79,6 +80,18 @@ export const SIDECAR_MESSAGES = Object.freeze({
   STATUS: "status",
   UPDATE: "update",
 } as const);
+
+export const SIDECAR_EVENTS = Object.freeze({
+  DESKTOP_EXPORT_PDF: "desktop.export-pdf",
+  INSPECT_CLICK: "inspect.click",
+  INSPECT_CONSOLE: "inspect.console",
+  INSPECT_EVAL: "inspect.eval",
+  INSPECT_SCREENSHOT: "inspect.screenshot",
+  INSPECT_STATUS: "inspect.status",
+  INSPECT_UPDATE: "inspect.update",
+} as const);
+
+export type SidecarEventKey = (typeof SIDECAR_EVENTS)[keyof typeof SIDECAR_EVENTS];
 
 export const DESKTOP_UPDATE_ACTIONS = Object.freeze({
   CHECK: "check",
@@ -354,6 +367,49 @@ export type DesktopUpdateResult = DesktopUpdateStatusSnapshot;
 
 export type SidecarStatusMessage = { type: typeof SIDECAR_MESSAGES.STATUS };
 export type SidecarShutdownMessage = { type: typeof SIDECAR_MESSAGES.SHUTDOWN };
+export type SidecarInspectStatusEventMessage = {
+  key: typeof SIDECAR_EVENTS.INSPECT_STATUS;
+  payload?: Record<string, never>;
+  type: typeof SIDECAR_MESSAGES.EVENT;
+};
+export type SidecarInspectEvalEventMessage = {
+  key: typeof SIDECAR_EVENTS.INSPECT_EVAL;
+  payload: DesktopEvalInput;
+  type: typeof SIDECAR_MESSAGES.EVENT;
+};
+export type SidecarInspectScreenshotEventMessage = {
+  key: typeof SIDECAR_EVENTS.INSPECT_SCREENSHOT;
+  payload: DesktopScreenshotInput;
+  type: typeof SIDECAR_MESSAGES.EVENT;
+};
+export type SidecarInspectConsoleEventMessage = {
+  key: typeof SIDECAR_EVENTS.INSPECT_CONSOLE;
+  payload?: Record<string, never>;
+  type: typeof SIDECAR_MESSAGES.EVENT;
+};
+export type SidecarInspectClickEventMessage = {
+  key: typeof SIDECAR_EVENTS.INSPECT_CLICK;
+  payload: DesktopClickInput;
+  type: typeof SIDECAR_MESSAGES.EVENT;
+};
+export type SidecarInspectUpdateEventMessage = {
+  key: typeof SIDECAR_EVENTS.INSPECT_UPDATE;
+  payload: DesktopUpdateInput;
+  type: typeof SIDECAR_MESSAGES.EVENT;
+};
+export type SidecarDesktopExportPdfEventMessage = {
+  key: typeof SIDECAR_EVENTS.DESKTOP_EXPORT_PDF;
+  payload: DesktopExportPdfInput;
+  type: typeof SIDECAR_MESSAGES.EVENT;
+};
+export type SidecarEventMessage =
+  | SidecarInspectStatusEventMessage
+  | SidecarInspectEvalEventMessage
+  | SidecarInspectScreenshotEventMessage
+  | SidecarInspectConsoleEventMessage
+  | SidecarInspectClickEventMessage
+  | SidecarInspectUpdateEventMessage
+  | SidecarDesktopExportPdfEventMessage;
 export type DesktopEvalMessage = { input: DesktopEvalInput; type: typeof SIDECAR_MESSAGES.EVAL };
 export type DesktopScreenshotMessage = { input: DesktopScreenshotInput; type: typeof SIDECAR_MESSAGES.SCREENSHOT };
 export type DesktopConsoleMessage = { type: typeof SIDECAR_MESSAGES.CONSOLE };
@@ -386,11 +442,13 @@ export type RegisterDesktopAuthResult = {
 export type DaemonSidecarMessage =
   | SidecarStatusMessage
   | SidecarShutdownMessage
+  | SidecarEventMessage
   | RegisterDesktopAuthMessage;
-export type WebSidecarMessage = SidecarStatusMessage | SidecarShutdownMessage;
+export type WebSidecarMessage = SidecarStatusMessage | SidecarShutdownMessage | SidecarEventMessage;
 export type DesktopSidecarMessage =
   | SidecarStatusMessage
   | SidecarShutdownMessage
+  | SidecarEventMessage
   | DesktopEvalMessage
   | DesktopScreenshotMessage
   | DesktopConsoleMessage
@@ -420,6 +478,7 @@ export type OpenDesignSidecarContract = {
   errorCodes: typeof SIDECAR_ERROR_CODES;
   messages: typeof SIDECAR_MESSAGES;
   modes: typeof SIDECAR_MODES;
+  events: typeof SIDECAR_EVENTS;
   normalizeApp: typeof normalizeAppKey;
   normalizeNamespace: typeof normalizeNamespace;
   normalizeSource: typeof normalizeSidecarSource;
@@ -608,6 +667,46 @@ function normalizeDesktopUpdateInput(input: unknown): DesktopUpdateInput {
   return { action: value.action };
 }
 
+function normalizeOptionalEmptyPayload(input: unknown, label: string): Record<string, never> | undefined {
+  if (input == null) return undefined;
+  const value = assertObject(input, label);
+  assertKnownKeys(value, [], label);
+  return {};
+}
+
+function normalizeSidecarEventMessage(input: unknown, label: string): SidecarEventMessage {
+  const value = assertObject(input, label);
+  assertKnownKeys(value, ["key", "payload", "type"], label);
+  const key = normalizeNonEmptyString(value.key, `${label} key`);
+
+  switch (key) {
+    case SIDECAR_EVENTS.INSPECT_STATUS:
+      return {
+        key,
+        ...(value.payload == null ? {} : { payload: normalizeOptionalEmptyPayload(value.payload, `${label} payload`) }),
+        type: SIDECAR_MESSAGES.EVENT,
+      };
+    case SIDECAR_EVENTS.INSPECT_EVAL:
+      return { key, payload: normalizeDesktopEvalInput(value.payload), type: SIDECAR_MESSAGES.EVENT };
+    case SIDECAR_EVENTS.INSPECT_SCREENSHOT:
+      return { key, payload: normalizeDesktopScreenshotInput(value.payload), type: SIDECAR_MESSAGES.EVENT };
+    case SIDECAR_EVENTS.INSPECT_CONSOLE:
+      return {
+        key,
+        ...(value.payload == null ? {} : { payload: normalizeOptionalEmptyPayload(value.payload, `${label} payload`) }),
+        type: SIDECAR_MESSAGES.EVENT,
+      };
+    case SIDECAR_EVENTS.INSPECT_CLICK:
+      return { key, payload: normalizeDesktopClickInput(value.payload), type: SIDECAR_MESSAGES.EVENT };
+    case SIDECAR_EVENTS.INSPECT_UPDATE:
+      return { key, payload: normalizeDesktopUpdateInput(value.payload), type: SIDECAR_MESSAGES.EVENT };
+    case SIDECAR_EVENTS.DESKTOP_EXPORT_PDF:
+      return { key, payload: normalizeDesktopExportPdfInput(value.payload), type: SIDECAR_MESSAGES.EVENT };
+    default:
+      throw new SidecarContractError(SIDECAR_ERROR_CODES.UNKNOWN_MESSAGE, `unknown sidecar event: ${key}`);
+  }
+}
+
 function normalizeMessageType(value: unknown, label: string): string {
   if (typeof value !== "string" || value.length === 0) {
     throw new SidecarContractError(SIDECAR_ERROR_CODES.INVALID_MESSAGE, `${label} type must be a non-empty string`);
@@ -618,6 +717,7 @@ function normalizeMessageType(value: unknown, label: string): string {
 export function normalizeDaemonSidecarMessage(input: unknown): DaemonSidecarMessage {
   const value = assertObject(input, "daemon sidecar message");
   const type = normalizeMessageType(value.type, "daemon sidecar message");
+  if (type === SIDECAR_MESSAGES.EVENT) return normalizeSidecarEventMessage(value, "daemon sidecar event message");
   if (type === SIDECAR_MESSAGES.STATUS || type === SIDECAR_MESSAGES.SHUTDOWN) {
     assertKnownKeys(value, ["type"], "daemon sidecar message");
     return { type };
@@ -632,6 +732,7 @@ export function normalizeDaemonSidecarMessage(input: unknown): DaemonSidecarMess
 export function normalizeWebSidecarMessage(input: unknown): WebSidecarMessage {
   const value = assertObject(input, "web sidecar message");
   const type = normalizeMessageType(value.type, "web sidecar message");
+  if (type === SIDECAR_MESSAGES.EVENT) return normalizeSidecarEventMessage(value, "web sidecar event message");
   if (type === SIDECAR_MESSAGES.STATUS || type === SIDECAR_MESSAGES.SHUTDOWN) {
     assertKnownKeys(value, ["type"], "web sidecar message");
     return { type };
@@ -643,6 +744,8 @@ export function normalizeDesktopSidecarMessage(input: unknown): DesktopSidecarMe
   const value = assertObject(input, "desktop sidecar message");
   const type = normalizeMessageType(value.type, "desktop sidecar message");
   switch (type) {
+    case SIDECAR_MESSAGES.EVENT:
+      return normalizeSidecarEventMessage(value, "desktop sidecar event message");
     case SIDECAR_MESSAGES.STATUS:
     case SIDECAR_MESSAGES.SHUTDOWN:
     case SIDECAR_MESSAGES.CONSOLE:
@@ -674,6 +777,7 @@ export const OPEN_DESIGN_SIDECAR_CONTRACT = Object.freeze({
   env: SIDECAR_RUNTIME_ENV,
   errorCodes: SIDECAR_ERROR_CODES,
   messages: SIDECAR_MESSAGES,
+  events: SIDECAR_EVENTS,
   modes: SIDECAR_MODES,
   normalizeApp: normalizeAppKey,
   normalizeNamespace,

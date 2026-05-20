@@ -89,15 +89,15 @@ addSharedOptions(cli.command("logs [app]", "Show log tail for daemon, web, deskt
 );
 
 addSharedOptions(
-  cli.command("inspect <app> [target]", "Inspect daemon/web status or desktop status/eval/screenshot/console/click"),
+  cli.command("inspect <app> [target] [payload]", "Inspect an app through generic sidecar IPC events"),
 )
   .option("--expr <js>", "JavaScript expression for desktop eval")
   .option("--path <file>", "Output path for desktop screenshot")
   .option("--selector <css>", "CSS selector for desktop click")
   .option("--timeout <seconds>", "Desktop inspect timeout in seconds")
   .option("--update-action <action>", "Desktop update action: status|check|download|install")
-  .action(async (appName: string, target: string | undefined, options: CliOptions) => {
-    output(await inspect(resolveToolDevConfig(options), appName, target, options), options);
+  .action(async (appName: string, target: string | undefined, payload: string | undefined, options: CliOptions) => {
+    output(await inspect(resolveToolDevConfig(options), appName, target, payload, options), options);
   });
 
 addSharedOptions(cli.command("check [app]", "Print status and recent logs for quick diagnostics")).action(

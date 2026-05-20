@@ -2,6 +2,7 @@ import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_ENV,
+  SIDECAR_EVENTS,
   SIDECAR_MESSAGES,
   normalizeDaemonSidecarMessage,
   type DaemonStatusSnapshot,
@@ -126,6 +127,11 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
     handler: async (message: unknown) => {
       const request = normalizeDaemonSidecarMessage(message);
       switch (request.type) {
+        case SIDECAR_MESSAGES.EVENT:
+          if (request.key !== SIDECAR_EVENTS.INSPECT_STATUS) {
+            throw new Error(`unsupported daemon sidecar event: ${request.key}`);
+          }
+          return withCurrentDesktopAuthGate(state);
         case SIDECAR_MESSAGES.STATUS:
           // PR #974 round 6 (mrcfps): recompute the gate flag per
           // request so `tools-dev start desktop` sees the live value

@@ -10,7 +10,9 @@ import {
   normalizeDesktopSidecarMessage,
   normalizeNamespace,
   normalizeSidecarStamp,
+  normalizeWebSidecarMessage,
   OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_EVENTS,
   SIDECAR_MESSAGES,
   SIDECAR_SOURCES,
   SIDECAR_STAMP_FIELDS,
@@ -41,6 +43,7 @@ describe("open-design sidecar contract", () => {
       source: STAMP_SOURCE_FLAG,
     });
     expect(OPEN_DESIGN_SIDECAR_CONTRACT.updateActions).toBe(DESKTOP_UPDATE_ACTIONS);
+    expect(OPEN_DESIGN_SIDECAR_CONTRACT.events).toBe(SIDECAR_EVENTS);
     expect(OPEN_DESIGN_SIDECAR_CONTRACT.updateChannels).toBe(DESKTOP_UPDATE_CHANNELS);
     expect(OPEN_DESIGN_SIDECAR_CONTRACT.updateModes).toBe(DESKTOP_UPDATE_MODES);
     expect(OPEN_DESIGN_SIDECAR_CONTRACT.updateStates).toBe(DESKTOP_UPDATE_STATES);
@@ -73,6 +76,47 @@ describe("open-design sidecar contract", () => {
     expect(normalizeDaemonSidecarMessage({ type: SIDECAR_MESSAGES.STATUS })).toEqual({ type: "status" });
     expect(normalizeDaemonSidecarMessage({ type: SIDECAR_MESSAGES.SHUTDOWN })).toEqual({ type: "shutdown" });
     expect(() => normalizeDaemonSidecarMessage({ input: {}, type: SIDECAR_MESSAGES.EVAL })).toThrow();
+  });
+
+  it("validates generic sidecar event messages", () => {
+    expect(normalizeDaemonSidecarMessage({
+      key: SIDECAR_EVENTS.INSPECT_STATUS,
+      type: SIDECAR_MESSAGES.EVENT,
+    })).toEqual({
+      key: "inspect.status",
+      type: "event",
+    });
+    expect(normalizeDesktopSidecarMessage({
+      key: SIDECAR_EVENTS.INSPECT_SCREENSHOT,
+      payload: { path: "/tmp/screen.png" },
+      type: SIDECAR_MESSAGES.EVENT,
+    })).toEqual({
+      key: "inspect.screenshot",
+      payload: { path: "/tmp/screen.png" },
+      type: "event",
+    });
+    expect(normalizeDesktopSidecarMessage({
+      key: SIDECAR_EVENTS.INSPECT_UPDATE,
+      payload: { action: DESKTOP_UPDATE_ACTIONS.STATUS },
+      type: SIDECAR_MESSAGES.EVENT,
+    })).toEqual({
+      key: "inspect.update",
+      payload: { action: "status" },
+      type: "event",
+    });
+    expect(() =>
+      normalizeDesktopSidecarMessage({
+        key: SIDECAR_EVENTS.INSPECT_STATUS,
+        payload: { noisy: true },
+        type: SIDECAR_MESSAGES.EVENT,
+      }),
+    ).toThrow(/unsupported fields/);
+    expect(() =>
+      normalizeWebSidecarMessage({
+        key: "inspect.unknown",
+        type: SIDECAR_MESSAGES.EVENT,
+      }),
+    ).toThrow(/unknown sidecar event/);
   });
 
   it("accepts a base64 register-desktop-auth payload", () => {

@@ -8,6 +8,7 @@ import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_ENV,
+  SIDECAR_EVENTS,
   SIDECAR_MESSAGES,
   normalizeDesktopSidecarMessage,
   type DesktopClickInput,
@@ -436,6 +437,25 @@ export async function runDesktopMain(
         throw new Error("desktop runtime is not initialized");
       }
       switch (request.type) {
+        case SIDECAR_MESSAGES.EVENT:
+          switch (request.key) {
+            case SIDECAR_EVENTS.INSPECT_STATUS:
+              return { ...activeDesktop.status(), update: await updater.status() };
+            case SIDECAR_EVENTS.INSPECT_EVAL:
+              return await activeDesktop.eval(request.payload);
+            case SIDECAR_EVENTS.INSPECT_SCREENSHOT:
+              return await activeDesktop.screenshot(request.payload);
+            case SIDECAR_EVENTS.INSPECT_CONSOLE:
+              return activeDesktop.console();
+            case SIDECAR_EVENTS.INSPECT_CLICK:
+              return await activeDesktop.click(request.payload);
+            case SIDECAR_EVENTS.INSPECT_UPDATE:
+              return await updater.handle(request.payload.action);
+            case SIDECAR_EVENTS.DESKTOP_EXPORT_PDF:
+              return await activeDesktop.exportPdf(request.payload);
+            default:
+              throw new Error("unsupported desktop sidecar event");
+          }
         case SIDECAR_MESSAGES.STATUS:
           return { ...activeDesktop.status(), update: await updater.status() };
         case SIDECAR_MESSAGES.EVAL:

@@ -7,6 +7,7 @@ import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_DEFAULTS,
+  SIDECAR_EVENTS,
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
@@ -150,6 +151,11 @@ async function main(): Promise<void> {
     handler: async (message: unknown) => {
       const request = normalizeDesktopSidecarMessage(message);
       switch (request.type) {
+        case SIDECAR_MESSAGES.EVENT:
+          if (request.key !== SIDECAR_EVENTS.INSPECT_STATUS) {
+            throw new Error(`unsupported headless sidecar event: ${request.key}`);
+          }
+          return { pid: process.pid, state: "running", url: webUrl, updatedAt: new Date().toISOString() };
         case SIDECAR_MESSAGES.STATUS:
           return { pid: process.pid, state: "running", url: webUrl, updatedAt: new Date().toISOString() };
         case SIDECAR_MESSAGES.SHUTDOWN:

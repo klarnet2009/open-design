@@ -1,13 +1,10 @@
 import {
   APP_KEYS,
+  SIDECAR_EVENTS,
   SIDECAR_MESSAGES,
   type DaemonStatusSnapshot,
-  type DesktopClickResult,
-  type DesktopConsoleResult,
-  type DesktopEvalResult,
-  type DesktopScreenshotResult,
   type DesktopStatusSnapshot,
-  type DesktopUpdateResult,
+  type SidecarEventKey,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
 import { requestJsonIpc } from "@open-design/sidecar";
@@ -26,6 +23,74 @@ function parseTimeoutMs(value: string | undefined): number | undefined {
   const seconds = Number(value);
   if (!Number.isFinite(seconds) || seconds <= 0) throw new Error("--timeout must be a positive number of seconds");
   return seconds * 1000;
+}
+
+function parsePayload(value: string | undefined): unknown {
+  if (value == null) return undefined;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch (error) {
+    throw new Error(`inspect payload must be valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function targetToEventKey(appName: ToolDevAppName, target: string | undefined): SidecarEventKey {
+  const operation = target ?? "status";
+  if (operation.includes(".")) return operation as SidecarEventKey;
+  if (operation === "status") return SIDECAR_EVENTS.INSPECT_STATUS;
+  if (operation === "eval") return SIDECAR_EVENTS.INSPECT_EVAL;
+  if (operation === "screenshot") return SIDECAR_EVENTS.INSPECT_SCREENSHOT;
+  if (operation === "console") return SIDECAR_EVENTS.INSPECT_CONSOLE;
+  if (operation === "click") return SIDECAR_EVENTS.INSPECT_CLICK;
+  if (operation === "update") return SIDECAR_EVENTS.INSPECT_UPDATE;
+  throw new Error(`unsupported ${appName} inspect target: ${operation}`);
+}
+
+function payloadFromOptions(eventKey: SidecarEventKey, payload: unknown, options: CliOptions): unknown {
+  if (payload != null) return payload;
+  if (eventKey === SIDECAR_EVENTS.INSPECT_EVAL) {
+    if (options.expr == null) throw new Error("--expr or JSON payload is required for inspect eval");
+    return { expression: options.expr };
+  }
+  if (eventKey === SIDECAR_EVENTS.INSPECT_SCREENSHOT) {
+    if (options.path == null) throw new Error("--path or JSON payload is required for inspect screenshot");
+    return { path: options.path };
+  }
+  if (eventKey === SIDECAR_EVENTS.INSPECT_CLICK) {
+    if (options.selector == null) throw new Error("--selector or JSON payload is required for inspect click");
+    return { selector: options.selector };
+  }
+  if (eventKey === SIDECAR_EVENTS.INSPECT_UPDATE) {
+    if (options.updateAction != null && !["status", "check", "download", "install"].includes(options.updateAction)) {
+      throw new Error("--update-action must be status, check, download, or install");
+    }
+    return { action: options.updateAction ?? "status" };
+  }
+  return undefined;
+}
+
+async function requestInspectEvent(
+  config: ToolDevConfig,
+  appName: ToolDevAppName,
+  eventKey: SidecarEventKey,
+  payload: unknown,
+  timeoutMs: number,
+) {
+  const message = {
+    key: eventKey,
+    ...(payload == null ? {} : { payload }),
+    type: SIDECAR_MESSAGES.EVENT,
+  };
+
+  try {
+    return await requestJsonIpc<unknown>(config.apps[appName].ipcPath, message, { timeoutMs });
+  } catch (error) {
+    const active = await findAppProcessTree(config, appName);
+    if (active.pids.length === 0) {
+      throw new Error(`${appName} sidecar is not running in namespace ${config.namespace}; inspect requires a reachable IPC server`);
+    }
+    throw error;
+  }
 }
 
 export async function inspectAppStatus(config: ToolDevConfig, appName: ToolDevAppName) {
@@ -53,62 +118,19 @@ export async function inspectAppStatus(config: ToolDevConfig, appName: ToolDevAp
   return { pid: active.rootPids[0] ?? null, state: active.pids.length > 0 ? "unknown" : "idle", url: null };
 }
 
-async function inspectDesktop(config: ToolDevConfig, target: string | undefined, options: CliOptions) {
-  const operation = target ?? "status";
+export async function inspect(
+  config: ToolDevConfig,
+  appName: string,
+  target: string | undefined,
+  payloadJson: string | undefined,
+  options: CliOptions,
+) {
+  if (appName !== APP_KEYS.DAEMON && appName !== APP_KEYS.WEB && appName !== APP_KEYS.DESKTOP) {
+    throw new Error(`unsupported tools-dev app: ${appName}`);
+  }
+
+  const eventKey = targetToEventKey(appName, target);
   const timeoutMs = parseTimeoutMs(options.timeout) ?? 30000;
-
-  switch (operation) {
-    case "status":
-      return (await inspectDesktopRuntime(runtimeLookup(config), 1000)) ?? ({ state: "idle" } satisfies DesktopStatusSnapshot);
-    case "eval":
-      if (options.expr == null) throw new Error("--expr is required for desktop eval");
-      return await requestJsonIpc<DesktopEvalResult>(
-        config.apps.desktop.ipcPath,
-        { input: { expression: options.expr }, type: SIDECAR_MESSAGES.EVAL },
-        { timeoutMs },
-      );
-    case "screenshot":
-      if (options.path == null) throw new Error("--path is required for desktop screenshot");
-      return await requestJsonIpc<DesktopScreenshotResult>(
-        config.apps.desktop.ipcPath,
-        { input: { path: options.path }, type: SIDECAR_MESSAGES.SCREENSHOT },
-        { timeoutMs },
-      );
-    case "console":
-      return await requestJsonIpc<DesktopConsoleResult>(config.apps.desktop.ipcPath, { type: SIDECAR_MESSAGES.CONSOLE }, { timeoutMs });
-    case "update":
-      if (options.updateAction != null && !["status", "check", "download", "install"].includes(options.updateAction)) {
-        throw new Error("--update-action must be status, check, download, or install");
-      }
-      return await requestJsonIpc<DesktopUpdateResult>(
-        config.apps.desktop.ipcPath,
-        { input: { action: options.updateAction ?? "status" }, type: SIDECAR_MESSAGES.UPDATE },
-        { timeoutMs },
-      );
-    case "click":
-      if (options.selector == null) throw new Error("--selector is required for desktop click");
-      return await requestJsonIpc<DesktopClickResult>(
-        config.apps.desktop.ipcPath,
-        { input: { selector: options.selector }, type: SIDECAR_MESSAGES.CLICK },
-        { timeoutMs },
-      );
-    default:
-      throw new Error(`unsupported desktop inspect target: ${operation}`);
-  }
-}
-
-export async function inspect(config: ToolDevConfig, appName: string, target: string | undefined, options: CliOptions) {
-  if (appName === APP_KEYS.DAEMON) {
-    if (target != null && target !== "status") throw new Error(`unsupported daemon inspect target: ${target}`);
-    return (
-      (await inspectDaemonRuntime(runtimeLookup(config), 1000)) ??
-      ({ desktopAuthGateActive: false, state: "idle", url: null } satisfies DaemonStatusSnapshot)
-    );
-  }
-  if (appName === APP_KEYS.WEB) {
-    if (target != null && target !== "status") throw new Error(`unsupported web inspect target: ${target}`);
-    return (await inspectWebRuntime(runtimeLookup(config), 1000)) ?? ({ state: "idle", url: null } satisfies WebStatusSnapshot);
-  }
-  if (appName !== APP_KEYS.DESKTOP) throw new Error(`unsupported tools-dev app: ${appName}`);
-  return await inspectDesktop(config, target, options);
+  const payload = payloadFromOptions(eventKey, parsePayload(payloadJson), options);
+  return await requestInspectEvent(config, appName, eventKey, payload, timeoutMs);
 }

@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   SIDECAR_ENV,
+  SIDECAR_EVENTS,
   SIDECAR_MESSAGES,
   normalizeWebSidecarMessage,
   type SidecarImplementationSnapshot,
@@ -755,6 +756,12 @@ async function createWebSidecarHandle(
     handler: async (message: unknown) => {
       const request = normalizeWebSidecarMessage(message);
       switch (request.type) {
+        case SIDECAR_MESSAGES.EVENT:
+          if (request.key !== SIDECAR_EVENTS.INSPECT_STATUS) {
+            throw new Error(`unsupported web sidecar event: ${request.key}`);
+          }
+          refreshRuntimeState();
+          return { ...state };
         case SIDECAR_MESSAGES.STATUS:
           refreshRuntimeState();
           return { ...state };
