@@ -25588,21 +25588,21 @@ body.desktop-pet-shell .pet-task-item {
   font-weight: 500;
 }
 .app .msg.user .user-text {
-  padding: 10px 34px 10px 13px;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg-subtle));
-  color: var(--text-strong);
-  line-height: 1.52;
+  padding: 8px 34px 8px 11px;
+  border: 1px solid color-mix(in srgb, var(--selected) 88%, #000);
+  border-radius: 14px 14px 4px 14px;
+  background: var(--selected);
+  color: #fff;
+  line-height: 1.45;
   font-size: 13.5px;
-  box-shadow: none;
+  box-shadow: var(--shadow-xs);
 }
 .app .msg.user .user-copy-btn {
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.85);
 }
 .app .msg.user .user-copy-btn:hover {
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  color: var(--text);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 .app .msg.assistant .assistant-flow {
   gap: 7px;
