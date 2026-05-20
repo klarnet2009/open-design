@@ -8,6 +8,7 @@ import {
   type DaemonStatusSnapshot,
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
+  type SidecarImplementationSnapshot,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
 import {
@@ -35,6 +36,7 @@ export function withCurrentDesktopAuthGate(snapshot: DaemonStatusSnapshot): Daem
 }
 
 const DAEMON_PORT_ENV = SIDECAR_ENV.DAEMON_PORT;
+const IMPLEMENTATION_ENV = SIDECAR_ENV.IMPLEMENTATION;
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
 
 export type DaemonSidecarHandle = {
@@ -50,6 +52,43 @@ function parsePort(value: string | undefined): number {
     throw new Error(`${DAEMON_PORT_ENV} must be an integer between 0 and 65535`);
   }
   return port;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringField(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function readImplementationEnv(): SidecarImplementationSnapshot | undefined {
+  const raw = process.env[IMPLEMENTATION_ENV];
+  if (raw == null || raw.length === 0) return undefined;
+
+  try {
+    const value = JSON.parse(raw) as unknown;
+    if (!isRecord(value)) return undefined;
+    const source = stringField(value, "source");
+    if (source === "bundle") {
+      const bundlePath = stringField(value, "bundlePath");
+      const entryPath = stringField(value, "entryPath");
+      if (bundlePath == null || entryPath == null) return undefined;
+      return {
+        bundlePath,
+        entryPath,
+        source,
+        ...(stringField(value, "descriptorPath") == null
+          ? {}
+          : { descriptorPath: stringField(value, "descriptorPath") as string }),
+      };
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
 }
 
 function isProcessAlive(pid: number): boolean {
@@ -96,8 +135,10 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
   // the public `status()` method below recompute it from
   // `isDesktopAuthGateActive()` per request — the value cached here is
   // a startup snapshot only.
+  const implementation = readImplementationEnv();
   const state: DaemonStatusSnapshot = {
     desktopAuthGateActive: isDesktopAuthGateActive(),
+    ...(implementation == null ? {} : { implementation }),
     pid: process.pid,
     state: "running",
     updatedAt: new Date().toISOString(),

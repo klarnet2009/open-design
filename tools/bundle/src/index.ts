@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { cp, lstat, mkdir, readFile, readdir, readlink, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -24,6 +26,17 @@ import {
 } from "@open-design/bundle";
 
 const WEB_APP = "web";
+const DAEMON_APP = "daemon";
+const DAEMON_BUNDLE_KEY = "od:sidecar:daemon";
+const DAEMON_PACKAGE_NAME = "@open-design/daemon";
+const DAEMON_RELEASE_ENTRY = "sidecar/index.mjs";
+const DAEMON_RESOURCE_ROOT = "daemon/resources";
+const DAEMON_SIDECAR_BUILD_ENTRY = "dist/sidecar/index.js";
+const DAEMON_CLI_BUILD_ENTRY = "dist/cli.js";
+const DAEMON_EXTERNAL_RUNTIME_DEPS = ["better-sqlite3", "blake3-wasm"] as const;
+const DAEMON_ESM_REQUIRE_BANNER =
+  'import { createRequire as __odCreateRequire } from "node:module"; const require = __odCreateRequire(import.meta.url);';
+const DAEMON_RESOURCE_DEDUPE_MIN_BYTES = 16 * 1024;
 const WEB_BUNDLE_KEY = "od:sidecar:web";
 const WEB_PACKAGE_NAME = "@open-design/web";
 const WEB_DEFAULT_ENTRY = "sidecar/index.ts";
@@ -35,7 +48,7 @@ const WEB_STATIC_SOURCE_ROOT = path.join(".next", "static");
 const WEB_PUBLIC_SOURCE_ROOT = "public";
 const WORKSPACE_MARKER_FILE = "pnpm-workspace.yaml";
 
-type BundleApp = typeof WEB_APP;
+type BundleApp = typeof WEB_APP | typeof DAEMON_APP;
 
 type JsonOption = {
   json?: boolean;
@@ -134,7 +147,8 @@ function containsPath(root: string, candidate: string): boolean {
 
 function requireSupportedApp(app: string): BundleApp {
   if (app === WEB_APP) return app;
-  throw new Error(`unsupported bundle app: ${app} (expected: web)`);
+  if (app === DAEMON_APP) return app;
+  throw new Error(`unsupported bundle app: ${app} (expected: daemon or web)`);
 }
 
 function requireOption(value: string | undefined, name: string): string {
@@ -239,6 +253,15 @@ function commandLine(command: string, args: string[]): string {
   return [command, ...args].map(quoteCommandPart).join(" ");
 }
 
+function toPosixPath(value: string): string {
+  return value.replaceAll("\\", "/");
+}
+
+function relativeImportSpecifier(fromDirectory: string, targetPath: string): string {
+  const specifier = toPosixPath(path.relative(fromDirectory, targetPath));
+  return specifier.startsWith(".") ? specifier : `./${specifier}`;
+}
+
 async function runPackageManager(workspaceRoot: string, args: string[], extraEnv: NodeJS.ProcessEnv): Promise<void> {
   const invocation = createPackageManagerInvocation(args, process.env);
   const startedAt = Date.now();
@@ -300,10 +323,27 @@ async function buildWebStandaloneIfWorkspaceSource(sourcePath: string): Promise<
   });
 }
 
-async function assertSidecarEntryFile(entryPath: string): Promise<void> {
+async function buildDaemonIfWorkspaceSource(sourcePath: string): Promise<void> {
+  const [packageName, workspaceRoot] = await Promise.all([
+    readPackageName(sourcePath),
+    findWorkspaceRoot(sourcePath),
+  ]);
+  if (packageName !== DAEMON_PACKAGE_NAME || workspaceRoot == null) return;
+  await runPackageManager(workspaceRoot, ["--filter", DAEMON_PACKAGE_NAME, "build"], {});
+}
+
+async function buildAppIfWorkspaceSource(app: BundleApp, sourcePath: string): Promise<void> {
+  if (app === WEB_APP) {
+    await buildWebStandaloneIfWorkspaceSource(sourcePath);
+    return;
+  }
+  await buildDaemonIfWorkspaceSource(sourcePath);
+}
+
+async function assertSidecarEntryFile(entryPath: string, label = "sidecar entry"): Promise<void> {
   const info = await lstat(entryPath);
-  if (info.isSymbolicLink()) throw new Error(`web sidecar entry must not be a symlink: ${entryPath}`);
-  if (!info.isFile()) throw new Error(`web sidecar entry must be a file: ${entryPath}`);
+  if (info.isSymbolicLink()) throw new Error(`${label} must not be a symlink: ${entryPath}`);
+  if (!info.isFile()) throw new Error(`${label} must be a file: ${entryPath}`);
 }
 
 async function emitWebSidecarEntry(input: {
@@ -312,7 +352,7 @@ async function emitWebSidecarEntry(input: {
   sourcePath: string;
 }): Promise<BundleArtifactDescriptor> {
   const sourceEntryPath = path.join(input.sourcePath, input.sourceDescriptor.entry.path);
-  await assertSidecarEntryFile(sourceEntryPath);
+  await assertSidecarEntryFile(sourceEntryPath, "web sidecar entry");
 
   if (input.sourceDescriptor.entry.kind === "js") {
     const outfile = path.join(input.outPath, input.sourceDescriptor.entry.path);
@@ -542,13 +582,217 @@ async function copyWebStandaloneRuntime(sourcePath: string, outPath: string): Pr
   await assertDirectoryWithInternalSymlinks(destinationRoot, "packed web standalone runtime");
 }
 
-async function releaseDescriptorForApp(app: BundleApp, sourcePath: string, outPath: string): Promise<BundleArtifactDescriptor> {
-  if (app !== WEB_APP) throw new Error(`unsupported bundle app: ${app}`);
-  return await emitWebSidecarEntry({
-    outPath,
-    sourceDescriptor: await detectWebSourceDescriptor(sourcePath),
-    sourcePath,
+function packageDestination(nodeModulesRoot: string, packageName: string): string {
+  return path.join(nodeModulesRoot, ...packageName.split("/"));
+}
+
+function resolvePackageJson(requireFrom: NodeJS.Require, packageName: string): string | null {
+  try {
+    return requireFrom.resolve(`${packageName}/package.json`);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "MODULE_NOT_FOUND") return null;
+    throw error;
+  }
+}
+
+async function copyPackageClosure(input: {
+  nodeModulesRoot: string;
+  packageName: string;
+  requireFrom: NodeJS.Require;
+  seen: Set<string>;
+}): Promise<boolean> {
+  const packageJsonPath = resolvePackageJson(input.requireFrom, input.packageName);
+  if (packageJsonPath == null) return false;
+
+  const packageRoot = path.dirname(packageJsonPath);
+  const realPackageRoot = await realpath(packageRoot);
+  if (input.seen.has(realPackageRoot)) return true;
+  input.seen.add(realPackageRoot);
+
+  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as {
+    dependencies?: Record<string, string>;
+  };
+  await copyRequiredDirectory(
+    packageRoot,
+    packageDestination(input.nodeModulesRoot, input.packageName),
+    `${input.packageName} runtime dependency`,
+  );
+
+  const childRequire = createRequire(packageJsonPath);
+  for (const dependencyName of Object.keys(packageJson.dependencies ?? {})) {
+    await copyPackageClosure({
+      nodeModulesRoot: input.nodeModulesRoot,
+      packageName: dependencyName,
+      requireFrom: childRequire,
+      seen: input.seen,
+    });
+  }
+  return true;
+}
+
+async function copyDaemonRuntimeDeps(sourcePath: string, outPath: string): Promise<void> {
+  const nodeModulesRoot = path.join(outPath, "node_modules");
+  const requireFromSource = createRequire(path.join(sourcePath, "package.json"));
+  const seen = new Set<string>();
+
+  for (const packageName of DAEMON_EXTERNAL_RUNTIME_DEPS) {
+    await copyPackageClosure({
+      nodeModulesRoot,
+      packageName,
+      requireFrom: requireFromSource,
+      seen,
+    });
+  }
+}
+
+async function copyDaemonResources(sourcePath: string, outPath: string): Promise<void> {
+  const workspaceRoot = await findWorkspaceRoot(sourcePath);
+  if (workspaceRoot == null) return;
+
+  const resourceRoot = path.join(outPath, ...DAEMON_RESOURCE_ROOT.split("/"));
+  const preserveSymlinks = process.platform !== "win32";
+  const copies: Array<{ from: string; to: string }> = [
+    { from: "skills", to: "skills" },
+    { from: "design-systems", to: "design-systems" },
+    { from: "design-templates", to: "design-templates" },
+    { from: "craft", to: "craft" },
+    { from: "assets/community-pets", to: "community-pets" },
+    { from: "prompt-templates", to: "prompt-templates" },
+    { from: "plugins/_official", to: "plugins/_official" },
+    { from: "plugins/registry", to: "plugins/registry" },
+  ];
+
+  for (const copyInfo of copies) {
+    await copyOptionalDirectory(
+      path.join(workspaceRoot, ...copyInfo.from.split("/")),
+      path.join(resourceRoot, ...copyInfo.to.split("/")),
+      `daemon resource ${copyInfo.from}`,
+      { preserveSymlinks },
+    );
+  }
+}
+
+async function collectDedupeCandidateFiles(root: string): Promise<Array<{ path: string; size: number }>> {
+  const files: Array<{ path: string; size: number }> = [];
+
+  async function walk(current: string): Promise<void> {
+    const entries = (await readdir(current, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      const entryPath = path.join(current, entry.name);
+      const metadata = await lstat(entryPath);
+      if (metadata.isSymbolicLink()) continue;
+      if (metadata.isDirectory()) {
+        await walk(entryPath);
+        continue;
+      }
+      if (metadata.isFile() && metadata.size >= DAEMON_RESOURCE_DEDUPE_MIN_BYTES) {
+        files.push({ path: entryPath, size: metadata.size });
+      }
+    }
+  }
+
+  if (await pathExists(root)) await walk(root);
+  return files;
+}
+
+async function hashFile(filePath: string): Promise<string> {
+  return createHash("sha256").update(await readFile(filePath)).digest("hex");
+}
+
+async function dedupeDaemonResourceFiles(resourceRoot: string): Promise<void> {
+  if (process.platform === "win32") return;
+
+  const filesBySize = new Map<number, string[]>();
+  for (const file of await collectDedupeCandidateFiles(resourceRoot)) {
+    const existing = filesBySize.get(file.size) ?? [];
+    existing.push(file.path);
+    filesBySize.set(file.size, existing);
+  }
+
+  for (const files of filesBySize.values()) {
+    if (files.length < 2) continue;
+    const canonicalByHash = new Map<string, string>();
+    for (const file of files) {
+      const digest = await hashFile(file);
+      const canonical = canonicalByHash.get(digest);
+      if (canonical == null) {
+        canonicalByHash.set(digest, file);
+        continue;
+      }
+
+      const relativeTarget = path.relative(path.dirname(file), canonical);
+      await rm(file, { force: true });
+      await symlink(relativeTarget.length === 0 ? "." : relativeTarget, file);
+    }
+  }
+}
+
+async function pruneDaemonRuntime(outPath: string): Promise<void> {
+  const betterSqliteRoot = path.join(outPath, "node_modules", "better-sqlite3");
+  await removePath(path.join(betterSqliteRoot, "deps"));
+  await removePath(path.join(betterSqliteRoot, "build", "Release", "obj"));
+  await pruneSourceBuildResidue(outPath);
+  await pruneBrokenSymlinks(outPath);
+}
+
+function renderDaemonCliEntry(input: { entryRoot: string; sourceCliPath: string }): string {
+  return [
+    'import { fileURLToPath } from "node:url";',
+    "const selfPath = fileURLToPath(import.meta.url);",
+    "process.env.OD_BIN ??= selfPath;",
+    "process.env.OD_DAEMON_CLI_PATH ??= selfPath;",
+    `await import(${JSON.stringify(relativeImportSpecifier(input.entryRoot, input.sourceCliPath))});`,
+    "",
+  ].join("\n");
+}
+
+async function emitDaemonRuntime(sourcePath: string, outPath: string): Promise<BundleArtifactDescriptor> {
+  const sourceSidecarPath = path.join(sourcePath, ...DAEMON_SIDECAR_BUILD_ENTRY.split("/"));
+  const sourceCliPath = path.join(sourcePath, ...DAEMON_CLI_BUILD_ENTRY.split("/"));
+  await assertSidecarEntryFile(sourceSidecarPath, "daemon sidecar build entry");
+  await assertSidecarEntryFile(sourceCliPath, "daemon CLI build entry");
+
+  const entryRoot = path.join(outPath, ".entrypoints");
+  const cliEntryPath = path.join(entryRoot, "daemon-cli.mjs");
+  await mkdir(entryRoot, { recursive: true });
+  await writeFile(cliEntryPath, renderDaemonCliEntry({ entryRoot, sourceCliPath }), "utf8");
+  await buildWithEsbuild({
+    banner: { js: DAEMON_ESM_REQUIRE_BANNER },
+    bundle: true,
+    chunkNames: "daemon/chunks/[name]-[hash]",
+    entryPoints: [
+      { in: sourceSidecarPath, out: "sidecar/index" },
+      { in: cliEntryPath, out: "daemon/daemon-cli" },
+    ],
+    external: [...DAEMON_EXTERNAL_RUNTIME_DEPS],
+    format: "esm",
+    outdir: outPath,
+    outExtension: { ".js": ".mjs" },
+    platform: "node",
+    splitting: true,
+    target: "node24",
   });
+  await rm(entryRoot, { force: true, recursive: true });
+  await copyDaemonRuntimeDeps(sourcePath, outPath);
+  await copyDaemonResources(sourcePath, outPath);
+  await pruneDaemonRuntime(outPath);
+  await dedupeDaemonResourceFiles(path.join(outPath, ...DAEMON_RESOURCE_ROOT.split("/")));
+
+  return {
+    entry: { kind: "js", path: DAEMON_RELEASE_ENTRY },
+    schemaVersion: BUNDLE_DESCRIPTOR_SCHEMA_VERSION,
+  };
+}
+
+async function releaseDescriptorForApp(app: BundleApp, sourcePath: string, outPath: string): Promise<BundleArtifactDescriptor> {
+  if (app === WEB_APP) {
+    return await emitWebSidecarEntry({
+      outPath,
+      sourceDescriptor: await detectWebSourceDescriptor(sourcePath),
+      sourcePath,
+    });
+  }
+  return await emitDaemonRuntime(sourcePath, outPath);
 }
 
 export async function validateBundlePath(bundlePath: string): Promise<BundleArtifact> {
@@ -568,14 +812,14 @@ export async function packBundle(input: PackBundleInput): Promise<BundleArtifact
   if (outputAlreadyExists) {
     if (input.replace !== true) throw new Error(`bundle output already exists: ${outPath}`);
   }
-  await buildWebStandaloneIfWorkspaceSource(sourcePath);
+  await buildAppIfWorkspaceSource(app, sourcePath);
   if (outputAlreadyExists) {
     await rm(outPath, { force: true, recursive: true });
   }
 
   await mkdir(path.dirname(outPath), { recursive: true });
   await mkdir(outPath, { recursive: true });
-  await copyWebStandaloneRuntime(sourcePath, outPath);
+  if (app === WEB_APP) await copyWebStandaloneRuntime(sourcePath, outPath);
   const descriptor = await releaseDescriptorForApp(app, sourcePath, outPath);
   // Source roots may carry a dev bundle.json; packed bundles always get a
   // release descriptor selected by tools-bundle.
@@ -651,7 +895,7 @@ export function createCli(): ReturnType<typeof cac> {
   cli.command("add <bundlePath>", "Add a direct bundle to a packages/bundle store")
     .option("--bundle-base-path <path>", "bundle store base path")
     .option("--version <version>", "bundle version")
-    .option("--key <key>", `bundle key (default: ${WEB_BUNDLE_KEY})`)
+    .option("--key <key>", `bundle key (default: ${WEB_BUNDLE_KEY}; daemon convention: ${DAEMON_BUNDLE_KEY})`)
     .option("--replace", "replace an existing bundle with the same key/version")
     .option("--json", "print JSON")
     .action(async (bundlePath: string, options: AddOptions) => {

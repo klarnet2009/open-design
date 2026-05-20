@@ -2,6 +2,7 @@ import type { ToolDevAppName } from "../config.js";
 
 export type ToolDevErrorCode =
   | "daemon-required"
+  | "daemon-replacement-failed"
   | "invalid-json-payload"
   | "invalid-option"
   | "missing-inspect-payload"
@@ -10,6 +11,7 @@ export type ToolDevErrorCode =
   | "runtime-unavailable"
   | "stale-stamped-process"
   | "startup-diagnostics"
+  | "web-replacement-failed"
   | "unsupported-app"
   | "unsupported-inspect-target";
 
@@ -36,6 +38,14 @@ export class ToolDevError extends Error {
 
   static daemonRequired(): ToolDevError {
     return new ToolDevError("daemon-required", "daemon must be running before web starts");
+  }
+
+  static daemonReplacementFailed(cause: unknown, rollback: unknown): ToolDevError {
+    const causeMessage = cause instanceof Error ? cause.message : String(cause);
+    return new ToolDevError("daemon-replacement-failed", `daemon bundle replacement failed: ${causeMessage}`, {
+      cause,
+      details: { rollback },
+    });
   }
 
   static invalidJsonPayload(context: string, cause: unknown): ToolDevError {
@@ -93,6 +103,14 @@ export class ToolDevError extends Error {
 
   static startupDiagnostics(message: string, cause: unknown): ToolDevError {
     return new ToolDevError("startup-diagnostics", message, { cause });
+  }
+
+  static webReplacementFailed(cause: unknown, rollback: unknown): ToolDevError {
+    const causeMessage = cause instanceof Error ? cause.message : String(cause);
+    return new ToolDevError("web-replacement-failed", `web bundle replacement failed: ${causeMessage}`, {
+      cause,
+      details: { rollback },
+    });
   }
 
   static unsupportedApp(value: string, expected: readonly string[]): ToolDevError {

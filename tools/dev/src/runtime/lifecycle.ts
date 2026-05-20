@@ -1,3 +1,4 @@
+import type { BundleArtifact } from "@open-design/bundle";
 import { APP_KEYS, SIDECAR_MESSAGES } from "@open-design/sidecar-proto";
 import { requestJsonIpc } from "@open-design/sidecar";
 import {
@@ -36,7 +37,6 @@ import {
   spawnDesktopRuntime,
   spawnWebRuntime,
   statusMatchesForcedPort,
-  urlPort,
   waitForExit,
 } from "./processes.js";
 import {
@@ -49,10 +49,10 @@ import {
 } from "../sidecar-client.js";
 import { printRunForegroundResult, type LogResult } from "./output.js";
 
-async function startDaemon(
+export async function startDaemon(
   config: ToolDevConfig,
   options: CliOptions,
-  startOptions: { requireDesktopAuth?: boolean } = {},
+  startOptions: { implementation?: BundleArtifact; requireDesktopAuth?: boolean } = {},
 ) {
   const daemonPort = parsePortOption(options.daemonPort, "--daemon-port");
   const existing = await inspectDaemonRuntime(runtimeLookup(config));
@@ -68,7 +68,10 @@ async function startDaemon(
   const requireDesktopAuth =
     (startOptions.requireDesktopAuth ?? false) || desktopAlreadyRunning != null;
 
-  const spawned = await spawnDaemonRuntime(config, options, { requireDesktopAuth });
+  const spawned = await spawnDaemonRuntime(config, options, {
+    implementation: startOptions.implementation,
+    requireDesktopAuth,
+  });
   try {
     const status = await waitForDaemonRuntime(runtimeLookup(config));
     return {
@@ -86,7 +89,7 @@ async function startDaemon(
   }
 }
 
-async function startWeb(config: ToolDevConfig, options: CliOptions) {
+export async function startWeb(config: ToolDevConfig, options: CliOptions) {
   const webPort = parsePortOption(options.webPort, "--web-port");
   const existing = await inspectWebRuntime(runtimeLookup(config));
   if (existing?.url != null && statusMatchesForcedPort(existing.url, webPort)) {
@@ -195,7 +198,7 @@ function stoppedByGracefulResult(matchedPids: number[]): StopProcessesResult {
   };
 }
 
-async function stopApp(config: ToolDevConfig, appName: ToolDevAppName) {
+export async function stopApp(config: ToolDevConfig, appName: ToolDevAppName) {
   const before = await findAppProcessTree(config, appName);
   const gracefulRequested = await requestAppShutdown(config, appName);
   const remainingAfterGraceful = gracefulRequested

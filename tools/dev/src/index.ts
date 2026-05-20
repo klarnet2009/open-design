@@ -12,10 +12,12 @@ import {
   status,
   stopTargets,
 } from "./runtime/lifecycle.js";
+import { replaceBundle } from "./runtime/replacement.js";
 import {
   output,
   printCheckResult,
   printLogs,
+  printReplaceResult,
   printRestartResult,
   printStartResult,
   printStatusResult,
@@ -35,7 +37,7 @@ process.on("uncaughtException", exitWithError);
 process.on("unhandledRejection", exitWithError);
 
 const cli = cac("tools-dev");
-const COMMAND_NAMES = new Set(["start", "run", "status", "stop", "restart", "logs", "inspect", "check"]);
+const COMMAND_NAMES = new Set(["start", "run", "status", "stop", "restart", "replace", "logs", "inspect", "check"]);
 
 function addSharedOptions(command: ReturnType<typeof cli.command>) {
   return command
@@ -79,6 +81,12 @@ addSharedOptions(cli.command("stop [app]", "Stop daemon, web, desktop, or all wh
 addPortOptions(addSharedOptions(cli.command("restart [app]", "Restart daemon, web, desktop, or all when app is omitted"))).action(
   async (appName: string | undefined, options: CliOptions) => {
     printRestartResult(await restartTargets(resolveToolDevConfig(options), appName, options), options);
+  },
+);
+
+addSharedOptions(cli.command("replace <app>", "Replace a running app implementation without changing its public port")).action(
+  async (appName: string, options: CliOptions) => {
+    printReplaceResult(await replaceBundle(resolveToolDevConfig(options), appName, options), options);
   },
 );
 

@@ -148,6 +148,29 @@ export function printRestartResult(result: unknown, options: CliOptions): void {
   printStartSection((asRecord(record?.start) ?? {}) as Partial<Record<ToolDevAppName, unknown>>, "Start");
 }
 
+export function printReplaceResult(result: unknown, options: CliOptions): void {
+  if (options.json === true) {
+    printJson(result);
+    return;
+  }
+
+  const record = asRecord(result);
+  process.stdout.write("tools-dev replace\n");
+  const previous = asRecord(record?.previous);
+  const next = asRecord(record?.next);
+  const ports = asRecord(record?.ports);
+  const appName = stringField(record ?? {}, "app") ?? "app";
+  const previousSource = stringField(previous ?? {}, "source") ?? "unknown";
+  const previousBundle = stringField(previous ?? {}, "bundlePath");
+  const nextBundle = stringField(next ?? {}, "bundlePath") ?? "unknown";
+  const daemonPort = stringField(ports ?? {}, "daemon");
+  const webPort = stringField(ports ?? {}, "web");
+  process.stdout.write(`- ${appName}: replaced ${previousBundle ?? previousSource} -> ${nextBundle}\n`);
+  if (daemonPort != null || webPort != null) {
+    process.stdout.write(`  ports: daemon ${daemonPort ?? "unknown"} · web ${webPort ?? "unknown"}\n`);
+  }
+}
+
 export function printStatusResult(result: unknown, options: CliOptions, appName: string | undefined): void {
   if (options.json === true) {
     printJson(result);

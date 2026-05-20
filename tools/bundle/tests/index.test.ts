@@ -60,6 +60,27 @@ async function makeWebSource(root: string, entry = "sidecar/index.ts"): Promise<
   return source;
 }
 
+async function makeDaemonSource(root: string, packageName = "@open-design/daemon"): Promise<string> {
+  const source = path.join(root, "daemon-source");
+  await mkdir(path.join(source, "dist", "sidecar"), { recursive: true });
+  await writeFile(path.join(source, "dist", "sidecar", "index.js"), "console.log('daemon sidecar');\n", "utf8");
+  await writeFile(path.join(source, "dist", "cli.js"), "console.log('daemon cli');\n", "utf8");
+  await writeFile(path.join(source, "package.json"), `${JSON.stringify({
+    name: packageName,
+    type: "module",
+  })}\n`, "utf8");
+  await writeFile(path.join(source, "bundle.json"), `${JSON.stringify({
+    entry: { kind: "tsx", path: "scripts/dev.ts" },
+    schemaVersion: 1,
+  }, null, 2)}\n`, "utf8");
+  return source;
+}
+
+async function writeLargeFixture(filePath: string): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${"same-resource-payload\n".repeat(1200)}`, "utf8");
+}
+
 async function exists(filePath: string): Promise<boolean> {
   try {
     await lstat(filePath);
@@ -102,6 +123,49 @@ describe("tools-bundle", () => {
       const artifact = await packBundle({ app: "web", outPath, sourcePath });
 
       assert.deepEqual(artifact.descriptor.entry, { kind: "js", path: "sidecar/index.mjs" });
+    });
+  });
+
+  it("packs and validates a daemon bundle", async () => {
+    await withTempRoot("pack-daemon", async (root) => {
+      const sourcePath = await makeDaemonSource(root);
+      const outPath = path.join(root, "bundle");
+
+      const artifact = await packBundle({ app: "daemon", outPath, sourcePath });
+
+      assert.deepEqual(artifact.descriptor, {
+        entry: { kind: "js", path: "sidecar/index.mjs" },
+        schemaVersion: 1,
+      });
+      assert.equal(await exists(path.join(outPath, "sidecar", "index.mjs")), true);
+      assert.equal(await exists(path.join(outPath, "daemon", "daemon-cli.mjs")), true);
+      assert.equal(await exists(path.join(outPath, ".entrypoints")), false);
+      assert.equal(await readFile(path.join(outPath, "bundle.json"), "utf8"), `${JSON.stringify(artifact.descriptor, null, 2)}\n`);
+      assert.deepEqual(await validateBundlePath(outPath), artifact);
+    });
+  });
+
+  it("deduplicates identical daemon resource files with internal symlinks", async () => {
+    if (process.platform === "win32") return;
+
+    await withTempRoot("pack-daemon-dedupe", async (root) => {
+      await writeFile(path.join(root, "pnpm-workspace.yaml"), "packages: []\n", "utf8");
+      const sourcePath = await makeDaemonSource(root, "fixture-daemon");
+      const duplicateA = path.join(root, "design-templates", "demo", "asset.txt");
+      const duplicateB = path.join(root, "skills", "demo", "asset.txt");
+      await writeLargeFixture(duplicateA);
+      await writeLargeFixture(duplicateB);
+
+      const outPath = path.join(root, "bundle");
+      await packBundle({ app: "daemon", outPath, sourcePath });
+
+      const packedA = path.join(outPath, "daemon", "resources", "design-templates", "demo", "asset.txt");
+      const packedB = path.join(outPath, "daemon", "resources", "skills", "demo", "asset.txt");
+      assert.equal((await lstat(packedA)).isFile(), true);
+      assert.equal((await lstat(packedB)).isSymbolicLink(), true);
+      assert.equal(await readlink(packedB), path.relative(path.dirname(packedB), packedA));
+      assert.equal(await readFile(packedB, "utf8"), await readFile(packedA, "utf8"));
+      await validateBundlePath(outPath);
     });
   });
 

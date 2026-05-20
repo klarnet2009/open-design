@@ -16,6 +16,7 @@ import {
   spawnBackgroundProcess,
 } from "@open-design/platform";
 import type { BundleEntryKind } from "@open-design/bundle";
+import type { BundleArtifact } from "@open-design/bundle";
 
 import { parsePortOption, type ToolDevAppName, type ToolDevConfig } from "../config.js";
 import { resolveWebImplementation, sidecarImplementationEnv, type ToolsDevWebSource } from "../bundles.js";
@@ -25,6 +26,8 @@ import type { CliOptions } from "./options.js";
 
 const PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
 const WEB_STANDALONE_BUNDLE_ROOT = "web/standalone";
+const DAEMON_CLI_BUNDLE_PATH = "daemon/daemon-cli.mjs";
+const DAEMON_RESOURCE_BUNDLE_ROOT = "daemon/resources";
 
 export function runtimeLookup(config: ToolDevConfig) {
   return { base: config.toolsDevRoot, namespace: config.namespace };
@@ -43,6 +46,10 @@ export function urlPort(url: string): string {
 function formatWebSource(source: ToolsDevWebSource): string {
   if (source.type === "workspace") return "workspace";
   return `bundle ${source.artifact.bundlePath} entry ${source.artifact.descriptor.entry.path}`;
+}
+
+function formatBundleSource(artifact: BundleArtifact): string {
+  return `bundle ${artifact.bundlePath} entry ${artifact.descriptor.entry.path}`;
 }
 
 export function statusMatchesForcedPort(url: string | null | undefined, forcedPort: number | null): boolean {
@@ -76,6 +83,13 @@ function webBundleRuntimeEnv(source: ToolsDevWebSource): NodeJS.ProcessEnv {
     OD_WEB_OUTPUT_MODE: "standalone",
     OD_WEB_PROD: "1",
     OD_WEB_STANDALONE_ROOT: path.join(source.artifact.bundlePath, ...WEB_STANDALONE_BUNDLE_ROOT.split("/")),
+  };
+}
+
+function daemonBundleRuntimeEnv(artifact: BundleArtifact): NodeJS.ProcessEnv {
+  return {
+    [SIDECAR_ENV.DAEMON_CLI_PATH]: path.join(artifact.bundlePath, ...DAEMON_CLI_BUNDLE_PATH.split("/")),
+    OD_RESOURCE_ROOT: path.join(artifact.bundlePath, ...DAEMON_RESOURCE_BUNDLE_ROOT.split("/")),
   };
 }
 
@@ -172,7 +186,7 @@ async function spawnStampedRuntime(request: {
 export async function spawnDaemonRuntime(
   config: ToolDevConfig,
   options: CliOptions,
-  spawnOptions: { requireDesktopAuth?: boolean } = {},
+  spawnOptions: { implementation?: BundleArtifact; requireDesktopAuth?: boolean } = {},
 ): Promise<{ pid: number }> {
   const daemonPort = parsePortOption(options.daemonPort, "--daemon-port");
   const webPort = parsePortOption(options.webPort, "--web-port");
@@ -180,6 +194,7 @@ export async function spawnDaemonRuntime(
 
   try {
     await logHandle.write(`\n[tools-dev] launching daemon at ${new Date().toISOString()}\n`);
+    await logHandle.write(`[tools-dev] daemon implementation: ${spawnOptions.implementation == null ? "workspace" : formatBundleSource(spawnOptions.implementation)}\n`);
     if (webPort != null) await logHandle.write(`[tools-dev] trusting web origin port ${webPort}\n`);
     if (spawnOptions.requireDesktopAuth) {
       await logHandle.write(`[tools-dev] requiring desktop auth on /api/import/folder\n`);
@@ -187,9 +202,21 @@ export async function spawnDaemonRuntime(
     return await spawnStampedRuntime({
       appName: APP_KEYS.DAEMON,
       config,
+      entryKind: spawnOptions.implementation?.descriptor.entry.kind,
+      entryPath: spawnOptions.implementation?.entryPath,
       env: {
         [SIDECAR_ENV.DAEMON_PORT]: String(daemonPort ?? 0),
         ...(webPort == null ? {} : { [SIDECAR_ENV.WEB_PORT]: String(webPort) }),
+        OD_DATA_DIR: config.dataRoot,
+        ...sidecarImplementationEnv(spawnOptions.implementation == null
+          ? null
+          : {
+              bundlePath: spawnOptions.implementation.bundlePath,
+              descriptorPath: spawnOptions.implementation.descriptorPath,
+              entryPath: spawnOptions.implementation.entryPath,
+              source: "bundle",
+            }),
+        ...(spawnOptions.implementation == null ? {} : daemonBundleRuntimeEnv(spawnOptions.implementation)),
         ...(options.parentPid == null ? {} : { [PARENT_PID_ENV]: String(options.parentPid) }),
         ...(spawnOptions.requireDesktopAuth ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
       },
