@@ -6,6 +6,7 @@ import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import { describe, expect, it } from 'vitest';
 
 import {
+  configureWebSidecarDevRuntimeEnv,
   prepareWebSidecarDevRuntime,
   resolveWebDevTsconfigPath,
   resolveWebRuntimeRoot,
@@ -49,6 +50,24 @@ describe('prepareWebSidecarDevRuntime', () => {
     } finally {
       await rm(root, { force: true, recursive: true });
     }
+  });
+
+  it('sets tools-dev runtime defaults from the sidecar runtime identity', () => {
+    const root = join(tmpdir(), 'open-design-web-dev-runtime-defaults');
+    const env: Record<string, string | undefined> = {};
+
+    configureWebSidecarDevRuntimeEnv({
+      env,
+      runtime: {
+        base: join(root, 'tools-dev'),
+        mode: 'dev',
+        namespace: 'web-defaults',
+        source: 'tools-dev',
+      },
+    });
+
+    expect(env[SIDECAR_ENV.WEB_DIST_DIR]).toBe(join(root, 'tools-dev', 'web-defaults', 'web', 'next'));
+    expect(env[SIDECAR_ENV.WEB_TSCONFIG_PATH]).toBe(join(root, 'tools-dev', 'web-defaults', 'web', 'tsconfig.json'));
   });
 
   it('resolves relative runtime paths from the web package root', () => {

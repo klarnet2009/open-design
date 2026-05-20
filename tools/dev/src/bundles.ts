@@ -22,7 +22,7 @@ export async function resolveWebImplementation(config: ToolDevConfig): Promise<T
   if (config.bundlePath == null) {
     return {
       entryKind: "tsx",
-      entryPath: config.apps.web.sidecarEntryPath,
+      entryPath: config.apps.web.launchEntryPath,
       implementation: null,
       source: { type: "workspace" },
     };

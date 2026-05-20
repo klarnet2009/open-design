@@ -10,7 +10,9 @@ import {
 import { requestJsonIpc } from "@open-design/sidecar";
 
 import type { CliOptions } from "./options.js";
-import type { ToolDevAppName, ToolDevConfig } from "../config.js";
+import { ALL_APPS, isAppName, type ToolDevAppName, type ToolDevConfig } from "../config.js";
+import { ToolDevError } from "../lib/errors.js";
+import { ensure } from "../lib/ensure.js";
 import { findAppProcessTree, runtimeLookup } from "./processes.js";
 import {
   inspectDaemonRuntime,
@@ -21,7 +23,8 @@ import {
 function parseTimeoutMs(value: string | undefined): number | undefined {
   if (value == null) return undefined;
   const seconds = Number(value);
-  if (!Number.isFinite(seconds) || seconds <= 0) throw new Error("--timeout must be a positive number of seconds");
+  ensure(Number.isFinite(seconds) && seconds > 0)
+    .or(() => ToolDevError.invalidOption("--timeout", "must be a positive number of seconds"));
   return seconds * 1000;
 }
 
@@ -30,7 +33,7 @@ function parsePayload(value: string | undefined): unknown {
   try {
     return JSON.parse(value) as unknown;
   } catch (error) {
-    throw new Error(`inspect payload must be valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+    throw ToolDevError.invalidJsonPayload("inspect payload", error);
   }
 }
 
@@ -43,27 +46,29 @@ function targetToEventKey(appName: ToolDevAppName, target: string | undefined): 
   if (operation === "console") return SIDECAR_EVENTS.INSPECT_CONSOLE;
   if (operation === "click") return SIDECAR_EVENTS.INSPECT_CLICK;
   if (operation === "update") return SIDECAR_EVENTS.INSPECT_UPDATE;
-  throw new Error(`unsupported ${appName} inspect target: ${operation}`);
+  throw ToolDevError.unsupportedInspectTarget(appName, operation);
 }
 
 function payloadFromOptions(eventKey: SidecarEventKey, payload: unknown, options: CliOptions): unknown {
   if (payload != null) return payload;
   if (eventKey === SIDECAR_EVENTS.INSPECT_EVAL) {
-    if (options.expr == null) throw new Error("--expr or JSON payload is required for inspect eval");
-    return { expression: options.expr };
+    const expression = ensure.defined(options.expr)
+      .or(() => ToolDevError.missingInspectPayload("eval", "--expr or JSON payload"));
+    return { expression };
   }
   if (eventKey === SIDECAR_EVENTS.INSPECT_SCREENSHOT) {
-    if (options.path == null) throw new Error("--path or JSON payload is required for inspect screenshot");
-    return { path: options.path };
+    const screenshotPath = ensure.defined(options.path)
+      .or(() => ToolDevError.missingInspectPayload("screenshot", "--path or JSON payload"));
+    return { path: screenshotPath };
   }
   if (eventKey === SIDECAR_EVENTS.INSPECT_CLICK) {
-    if (options.selector == null) throw new Error("--selector or JSON payload is required for inspect click");
-    return { selector: options.selector };
+    const selector = ensure.defined(options.selector)
+      .or(() => ToolDevError.missingInspectPayload("click", "--selector or JSON payload"));
+    return { selector };
   }
   if (eventKey === SIDECAR_EVENTS.INSPECT_UPDATE) {
-    if (options.updateAction != null && !["status", "check", "download", "install"].includes(options.updateAction)) {
-      throw new Error("--update-action must be status, check, download, or install");
-    }
+    ensure(options.updateAction == null || ["status", "check", "download", "install"].includes(options.updateAction))
+      .or(() => ToolDevError.invalidOption("--update-action", "must be status, check, download, or install"));
     return { action: options.updateAction ?? "status" };
   }
   return undefined;
@@ -87,7 +92,7 @@ async function requestInspectEvent(
   } catch (error) {
     const active = await findAppProcessTree(config, appName);
     if (active.pids.length === 0) {
-      throw new Error(`${appName} sidecar is not running in namespace ${config.namespace}; inspect requires a reachable IPC server`);
+      throw ToolDevError.runtimeUnavailable(appName, config.namespace);
     }
     throw error;
   }
@@ -125,12 +130,11 @@ export async function inspect(
   payloadJson: string | undefined,
   options: CliOptions,
 ) {
-  if (appName !== APP_KEYS.DAEMON && appName !== APP_KEYS.WEB && appName !== APP_KEYS.DESKTOP) {
-    throw new Error(`unsupported tools-dev app: ${appName}`);
-  }
+  ensure(isAppName(appName)).or(() => ToolDevError.unsupportedApp(appName, ALL_APPS));
+  const targetAppName = appName as ToolDevAppName;
 
-  const eventKey = targetToEventKey(appName, target);
+  const eventKey = targetToEventKey(targetAppName, target);
   const timeoutMs = parseTimeoutMs(options.timeout) ?? 30000;
   const payload = payloadFromOptions(eventKey, parsePayload(payloadJson), options);
-  return await requestInspectEvent(config, appName, eventKey, payload, timeoutMs);
+  return await requestInspectEvent(config, targetAppName, eventKey, payload, timeoutMs);
 }

@@ -1,14 +1,12 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": true,
-    "rootDir": "."
+    "outDir": "dist/sidecar",
+    "rootDir": "sidecar",
+    "types": ["node"]
   },
   "include": [
-    "scripts/**/*.ts",
-    "tests/**/*.ts",
-    "tests/**/*.tsx",
-    "src/**/*.ts"
+    "sidecar/**/*.ts"
   ],
   "exclude": [
     "node_modules",

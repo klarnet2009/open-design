@@ -258,8 +258,8 @@ export function resolveStandaloneServerEntry(
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
 
-function shouldUseStandaloneOutput(runtime: SidecarRuntimeContext<SidecarStamp>): boolean {
-  return runtime.mode !== "dev" && process.env[WEB_OUTPUT_MODE_ENV] === "standalone";
+function shouldUseStandaloneOutput(): boolean {
+  return process.env[WEB_OUTPUT_MODE_ENV] === "standalone";
 }
 
 function resolveDaemonOrigin(): string | null {
@@ -822,7 +822,7 @@ async function startRegularNextSidecar(
   runtime: SidecarRuntimeContext<SidecarStamp>,
   webRoot: string,
 ): Promise<WebSidecarHandle> {
-  await prepareWebSidecarDevRuntime({ webRoot });
+  await prepareWebSidecarDevRuntime({ runtime, webRoot });
   const app = createNextApp({ dev: process.env.OD_WEB_PROD !== "1" && runtime.mode === "dev", dir: webRoot });
   await prepareNextApp(app, webRoot);
 
@@ -865,7 +865,7 @@ async function startStandaloneNextSidecar(
 }
 
 export async function startWebSidecar(runtime: SidecarRuntimeContext<SidecarStamp>): Promise<WebSidecarHandle> {
-  if (shouldUseStandaloneOutput(runtime)) {
+  if (shouldUseStandaloneOutput()) {
     const webRoot = resolveConfiguredStandaloneRoot() == null ? resolveWebRoot() : null;
     return await startStandaloneNextSidecar(runtime, webRoot);
   }

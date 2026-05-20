@@ -1,10 +1,27 @@
 import { randomBytes } from 'node:crypto';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DaemonStatusSnapshot } from '@open-design/sidecar-proto';
 
-import { resetDesktopAuthForTests, setDesktopAuthSecret } from '../src/desktop-auth.js';
-import { withCurrentDesktopAuthGate } from '../src/sidecar/server.js';
+const desktopAuth = vi.hoisted(() => {
+  let gateActive = false;
+  return {
+    isDesktopAuthGateActive: vi.fn(() => gateActive),
+    reset() {
+      gateActive = false;
+    },
+    setDesktopAuthSecret: vi.fn((secret: Buffer | null) => {
+      if (secret != null) gateActive = true;
+    }),
+  };
+});
+
+vi.mock('#desktop-auth', () => ({
+  isDesktopAuthGateActive: desktopAuth.isDesktopAuthGateActive,
+  setDesktopAuthSecret: desktopAuth.setDesktopAuthSecret,
+}));
+
+import { withCurrentDesktopAuthGate } from '../sidecar/server.js';
 
 /**
  * PR #974 round 6 (mrcfps): tools-dev's split-start hardening reads
@@ -19,12 +36,12 @@ import { withCurrentDesktopAuthGate } from '../src/sidecar/server.js';
  * lifetime. A regression that caches the flag in `state` would
  * silently break tools-dev's restart-on-ungated-daemon detection.
  *
- * @see apps/daemon/src/sidecar/server.ts
+ * @see apps/daemon/sidecar/server.ts
  * @see tools/dev/src/desktop-auth-gate.ts
  */
 describe('withCurrentDesktopAuthGate', () => {
   // The startup snapshot mirrors what `startDaemonSidecar` builds at
-  // boot — see apps/daemon/src/sidecar/server.ts. Field values other
+  // boot — see apps/daemon/sidecar/server.ts. Field values other
   // than `desktopAuthGateActive` are arbitrary; the helper passes
   // them through verbatim, so we use stable fixtures.
   const baseSnapshot: DaemonStatusSnapshot = {
@@ -36,13 +53,13 @@ describe('withCurrentDesktopAuthGate', () => {
   };
 
   beforeEach(() => {
-    resetDesktopAuthForTests();
+    desktopAuth.reset();
   });
 
   afterEach(() => {
     // Belt-and-braces: the gate flag is process-global; clear before any
     // other suite reads it (see desktop-import-token-gate.test.ts:53-60).
-    resetDesktopAuthForTests();
+    desktopAuth.reset();
   });
 
   it('reports gate inactive when no secret has ever been registered (web-only mode)', () => {
@@ -55,7 +72,7 @@ describe('withCurrentDesktopAuthGate', () => {
   });
 
   it('reports gate active immediately after the desktop registers a secret', () => {
-    setDesktopAuthSecret(randomBytes(32));
+    desktopAuth.setDesktopAuthSecret(randomBytes(32));
     const result = withCurrentDesktopAuthGate(baseSnapshot);
     expect(result.desktopAuthGateActive).toBe(true);
   });
@@ -66,8 +83,8 @@ describe('withCurrentDesktopAuthGate', () => {
     // The STATUS snapshot must reflect that stickiness so tools-dev
     // does NOT trigger an unnecessary restart after a transient
     // null-clear (e.g., between test runs in the same process).
-    setDesktopAuthSecret(randomBytes(32));
-    setDesktopAuthSecret(null);
+    desktopAuth.setDesktopAuthSecret(randomBytes(32));
+    desktopAuth.setDesktopAuthSecret(null);
     const result = withCurrentDesktopAuthGate(baseSnapshot);
     expect(result.desktopAuthGateActive).toBe(true);
   });

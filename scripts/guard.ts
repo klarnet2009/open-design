@@ -635,6 +635,92 @@ async function checkToolsLayout(): Promise<boolean> {
   return true;
 }
 
+const appSourceRuntimeBoundarySkippedDirectories = new Set([".next", "dist", "node_modules", "out"]);
+const appSourceRuntimeBoundaryExtensions = new Set([".cts", ".mts", ".ts", ".tsx"]);
+const appSourceRuntimeBoundaryRestrictedImportPattern =
+  /\bfrom\s+["'](@open-design\/(?:bundle|sidecar))["']|^\s*import\s+["'](@open-design\/(?:bundle|sidecar))["']/gm;
+
+const appSourceRuntimeBoundaryAllowedExactPaths = new Map<string, string>([
+  [
+    "apps/desktop/src/main/index.ts",
+    "pre-existing Electron main sidecar host; split needs a dedicated desktop process-shape pass",
+  ],
+  [
+    "apps/daemon/src/daemon-url.ts",
+    "pre-existing CLI/MCP sidecar URL discovery; extract behind an app-local adapter before enforcing",
+  ],
+]);
+
+const appSourceRuntimeBoundaryAllowedPathPrefixes: Array<{ prefix: string; reason: string }> = [
+  {
+    prefix: "apps/packaged/src/",
+    reason: "packaged app is the sidecar and bundle orchestration runtime by design",
+  },
+];
+
+type AppSourceRuntimeBoundaryViolation = {
+  filePath: string;
+  importName: string;
+  lineNumber: number;
+};
+
+function isAppSourceRuntimeBoundaryFile(repositoryPath: string): boolean {
+  return /^apps\/[^/]+\/src\//.test(repositoryPath) && appSourceRuntimeBoundaryExtensions.has(path.extname(repositoryPath));
+}
+
+function appSourceRuntimeBoundaryAllowance(repositoryPath: string): string | null {
+  const exactReason = appSourceRuntimeBoundaryAllowedExactPaths.get(repositoryPath);
+  if (exactReason != null) return exactReason;
+  return appSourceRuntimeBoundaryAllowedPathPrefixes.find((entry) => repositoryPath.startsWith(entry.prefix))?.reason ?? null;
+}
+
+function collectAppSourceRuntimeBoundaryViolationsFromSource(
+  repositoryPath: string,
+  source: string,
+): AppSourceRuntimeBoundaryViolation[] {
+  const violations: AppSourceRuntimeBoundaryViolation[] = [];
+
+  for (const match of source.matchAll(appSourceRuntimeBoundaryRestrictedImportPattern)) {
+    violations.push({
+      filePath: repositoryPath,
+      importName: match[1] ?? match[2] ?? "unknown",
+      lineNumber: lineNumberForIndex(source, match.index ?? 0),
+    });
+  }
+
+  return violations;
+}
+
+async function checkAppSourceRuntimeBoundary(): Promise<boolean> {
+  const violations: AppSourceRuntimeBoundaryViolation[] = [];
+  const appsRoot = path.join(repoRoot, "apps");
+
+  for (const repositoryPath of await collectRepositoryFiles(appsRoot, appSourceRuntimeBoundarySkippedDirectories)) {
+    if (!isAppSourceRuntimeBoundaryFile(repositoryPath)) continue;
+    if (appSourceRuntimeBoundaryAllowance(repositoryPath) != null) continue;
+
+    violations.push(
+      ...collectAppSourceRuntimeBoundaryViolationsFromSource(
+        repositoryPath,
+        await readFile(path.join(repoRoot, repositoryPath), "utf8"),
+      ),
+    );
+  }
+
+  if (violations.length > 0) {
+    console.error("App src runtime boundary violations found:");
+    for (const violation of violations) {
+      console.error(
+        `- ${violation.filePath}:${violation.lineNumber} imports ${violation.importName}; move sidecar/bundle runtime plumbing to sidecar/ or scripts/`,
+      );
+    }
+    return false;
+  }
+
+  console.log("App src runtime boundary check passed: app business src does not directly import sidecar/bundle runtime packages.");
+  return true;
+}
+
 const stylePolicySkippedDirectories = new Set([
   ".next",
   ".od-data",
@@ -907,6 +993,7 @@ const checks: GuardCheck[] = [
   { name: "e2e layout", run: checkE2eLayout },
   { name: "web test layout", run: checkWebTestLayout },
   { name: "tools layout", run: checkToolsLayout },
+  { name: "app src runtime boundary", run: checkAppSourceRuntimeBoundary },
   { name: "style policy", run: checkStylePolicy },
   { name: "design system manifests", run: checkDesignSystemManifests },
   { name: "design system package quality", run: checkDesignSystemPackageQuality },

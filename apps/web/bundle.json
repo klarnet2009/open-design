@@ -1,0 +1,7 @@
+{
+  "entry": {
+    "kind": "tsx",
+    "path": "sidecar/index.ts"
+  },
+  "schemaVersion": 1
+}

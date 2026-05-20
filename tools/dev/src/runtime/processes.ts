@@ -19,10 +19,12 @@ import type { BundleEntryKind } from "@open-design/bundle";
 
 import { parsePortOption, type ToolDevAppName, type ToolDevConfig } from "../config.js";
 import { resolveWebImplementation, sidecarImplementationEnv, type ToolsDevWebSource } from "../bundles.js";
+import { ToolDevError } from "../lib/errors.js";
 import { waitForDaemonRuntime } from "../sidecar-client.js";
 import type { CliOptions } from "./options.js";
 
 const PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
+const WEB_STANDALONE_BUNDLE_ROOT = "web/standalone";
 
 export function runtimeLookup(config: ToolDevConfig) {
   return { base: config.toolsDevRoot, namespace: config.namespace };
@@ -50,6 +52,31 @@ export function statusMatchesForcedPort(url: string | null | undefined, forcedPo
 function prependNodePath(entries: string[], current = process.env.NODE_PATH): string {
   const existing = current == null || current.length === 0 ? [] : current.split(path.delimiter);
   return [...entries, ...existing].join(path.delimiter);
+}
+
+function webNodePathEntries(config: ToolDevConfig, source: ToolsDevWebSource): string[] {
+  if (source.type === "workspace") {
+    return [
+      path.join(config.workspaceRoot, "apps/web/node_modules"),
+      path.join(config.workspaceRoot, "node_modules"),
+    ];
+  }
+
+  const standaloneRoot = path.join(source.artifact.bundlePath, ...WEB_STANDALONE_BUNDLE_ROOT.split("/"));
+  return [
+    path.join(standaloneRoot, "apps/web/node_modules"),
+    path.join(standaloneRoot, "node_modules"),
+  ];
+}
+
+function webBundleRuntimeEnv(source: ToolsDevWebSource): NodeJS.ProcessEnv {
+  if (source.type !== "bundle") return {};
+  return {
+    NODE_ENV: "production",
+    OD_WEB_OUTPUT_MODE: "standalone",
+    OD_WEB_PROD: "1",
+    OD_WEB_STANDALONE_ROOT: path.join(source.artifact.bundlePath, ...WEB_STANDALONE_BUNDLE_ROOT.split("/")),
+  };
 }
 
 async function openAppLog(config: ToolDevConfig, appName: ToolDevAppName): Promise<FileHandle> {
@@ -109,11 +136,11 @@ export async function waitForExit(config: ToolDevConfig, appName: ToolDevAppName
 export async function assertNoStaleProcess(config: ToolDevConfig, appName: ToolDevAppName): Promise<void> {
   const active = await findAppProcessTree(config, appName);
   if (active.pids.length > 0) {
-    throw new Error(`${appName} has active stamped processes but no reachable IPC status; run tools-dev stop ${appName} first`);
+    throw ToolDevError.staleStampedProcess(appName);
   }
 }
 
-async function spawnSidecarRuntime(request: {
+async function spawnStampedRuntime(request: {
   appName: typeof APP_KEYS.DAEMON | typeof APP_KEYS.DESKTOP | typeof APP_KEYS.WEB;
   config: ToolDevConfig;
   entryKind?: BundleEntryKind;
@@ -122,8 +149,8 @@ async function spawnSidecarRuntime(request: {
   logHandle: FileHandle;
 }): Promise<{ pid: number }> {
   const { args: stampArgs, env } = createAppStamp(request.config, request.appName);
-  const sidecarConfig = request.config.apps[request.appName];
-  const entryPath = request.entryPath ?? sidecarConfig.sidecarEntryPath;
+  const appLaunchConfig = request.config.apps[request.appName];
+  const entryPath = request.entryPath ?? appLaunchConfig.launchEntryPath;
   const args = request.entryKind === "js"
     ? [entryPath, ...stampArgs]
     : [request.config.tsxCliPath, entryPath, ...stampArgs];
@@ -157,7 +184,7 @@ export async function spawnDaemonRuntime(
     if (spawnOptions.requireDesktopAuth) {
       await logHandle.write(`[tools-dev] requiring desktop auth on /api/import/folder\n`);
     }
-    return await spawnSidecarRuntime({
+    return await spawnStampedRuntime({
       appName: APP_KEYS.DAEMON,
       config,
       env: {
@@ -175,7 +202,7 @@ export async function spawnDaemonRuntime(
 
 export async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Promise<{ pid: number }> {
   const daemonStatus = await waitForDaemonRuntime(runtimeLookup(config));
-  if (daemonStatus.url == null) throw new Error("daemon must be running before web starts");
+  if (daemonStatus.url == null) throw ToolDevError.daemonRequired();
 
   const webPort = parsePortOption(options.webPort, "--web-port");
   const daemonPort = urlPort(daemonStatus.url);
@@ -186,19 +213,14 @@ export async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions
     await logHandle.write(`\n[tools-dev] launching web at ${new Date().toISOString()}\n`);
     await logHandle.write(`[tools-dev] web implementation: ${formatWebSource(webImplementation.source)}\n`);
     await logHandle.write(`[tools-dev] proxying web API requests to daemon port ${daemonPort}\n`);
-    return await spawnSidecarRuntime({
+    return await spawnStampedRuntime({
       appName: APP_KEYS.WEB,
       config,
       entryKind: webImplementation.entryKind,
       entryPath: webImplementation.entryPath,
       env: {
-        NODE_PATH: prependNodePath([
-          path.join(config.workspaceRoot, "apps/web/node_modules"),
-          path.join(config.workspaceRoot, "node_modules"),
-        ]),
+        NODE_PATH: prependNodePath(webNodePathEntries(config, webImplementation.source)),
         [SIDECAR_ENV.DAEMON_PORT]: daemonPort,
-        [SIDECAR_ENV.WEB_DIST_DIR]: config.apps.web.nextDistDir,
-        [SIDECAR_ENV.WEB_TSCONFIG_PATH]: config.apps.web.nextTsconfigPath,
         [SIDECAR_ENV.WEB_PORT]: String(webPort ?? 0),
         PORT: String(webPort ?? 0),
         ...sidecarImplementationEnv(webImplementation.implementation),
@@ -206,6 +228,7 @@ export async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions
         ...(options.prod === true
           ? { NODE_ENV: "production", OD_WEB_OUTPUT_MODE: "server", OD_WEB_PROD: "1" }
           : {}),
+        ...webBundleRuntimeEnv(webImplementation.source),
       },
       logHandle,
     });
@@ -219,7 +242,7 @@ export async function spawnDesktopRuntime(config: ToolDevConfig, options: CliOpt
 
   try {
     await logHandle.write(`\n[tools-dev] launching desktop at ${new Date().toISOString()}\n`);
-    return await spawnSidecarRuntime({
+    return await spawnStampedRuntime({
       appName: APP_KEYS.DESKTOP,
       config,
       env: {

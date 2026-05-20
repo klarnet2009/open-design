@@ -1,4 +1,4 @@
-import { lstat, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -170,7 +170,24 @@ describe("bundle inventory", () => {
     expect((await listBundles(basePath)).map((entry) => entry.ref)).toEqual([{ key: "od:sidecar:daemon", version: "dev.1" }]);
   });
 
-  it("rejects source trees with symlinks", async () => {
+  it("stores bundle content with internal relative symlinks", async () => {
+    const basePath = await tempRoot("internal-symlink-store");
+    const source = await sourceTree("internal-symlink-source", { "deps/entry.mjs": "ok\n" });
+    await symlink("deps/entry.mjs", join(source, "entry-link.mjs"));
+
+    const resolved = await addBundle({
+      basePath,
+      ref: { key: "od:sidecar:web", version: "dev.1" },
+      sourcePath: source,
+    });
+
+    const linkPath = join(resolved.path, "entry-link.mjs");
+    expect((await lstat(linkPath)).isSymbolicLink()).toBe(true);
+    expect(await readlink(linkPath)).toBe("deps/entry.mjs");
+    expect(await readFile(linkPath, "utf8")).toBe("ok\n");
+  });
+
+  it("rejects source trees with external symlinks", async () => {
     const basePath = await tempRoot("symlink-store");
     const source = await sourceTree("symlink-source", { "entry.mjs": "ok\n" });
     await symlink("/tmp", join(source, "escape"));

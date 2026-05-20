@@ -25,6 +25,7 @@ import {
   type LogDiagnostic,
 } from "../diagnostics.js";
 import { ensureDesktopGate } from "../desktop-auth-gate.js";
+import { ToolDevError } from "../lib/errors.js";
 import { inspectAppStatus } from "./inspect.js";
 import {
   appConfig,
@@ -59,7 +60,7 @@ async function startDaemon(
     return { app: APP_KEYS.DAEMON, created: false, logPath: config.apps.daemon.latestLogPath, status: existing };
   }
   if (existing?.url != null) {
-    throw new Error(`${APP_KEYS.DAEMON} is already running in namespace ${config.namespace} at ${existing.url}; stop it or choose another namespace`);
+    throw ToolDevError.runtimeAlreadyRunning(APP_KEYS.DAEMON, config.namespace, existing.url);
   }
   await assertNoStaleProcess(config, APP_KEYS.DAEMON);
 
@@ -92,7 +93,7 @@ async function startWeb(config: ToolDevConfig, options: CliOptions) {
     return { app: APP_KEYS.WEB, created: false, logPath: config.apps.web.latestLogPath, status: existing };
   }
   if (existing?.url != null) {
-    throw new Error(`${APP_KEYS.WEB} is already running in namespace ${config.namespace} at ${existing.url}; stop it or choose another namespace`);
+    throw ToolDevError.runtimeAlreadyRunning(APP_KEYS.WEB, config.namespace, existing.url);
   }
   await assertNoStaleProcess(config, APP_KEYS.WEB);
 

@@ -7,6 +7,8 @@
   "include": [
     "tests/**/*.ts",
     "tests/**/*.tsx",
+    "scripts/**/*.ts",
+    "sidecar/**/*.ts",
     "src/**/*.ts"
   ],
   "exclude": [

@@ -8,6 +8,8 @@ import {
 } from "@open-design/sidecar-proto";
 import { requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
 
+import { ToolDevError } from "./lib/errors.js";
+
 export type AppRuntimeLookup = {
   base: string;
   namespace: string;
@@ -40,7 +42,7 @@ export async function waitForDaemonRuntime(runtime: AppRuntimeLookup, timeoutMs 
     if (snapshot?.url != null) return snapshot;
     await new Promise((resolveWait) => setTimeout(resolveWait, 150));
   }
-  throw new Error("daemon did not expose status in time");
+  throw ToolDevError.runtimeStartupTimeout(APP_KEYS.DAEMON);
 }
 
 export async function inspectWebRuntime(runtime: AppRuntimeLookup, timeoutMs = 800): Promise<WebStatusSnapshot | null> {
@@ -58,7 +60,7 @@ export async function waitForWebRuntime(runtime: AppRuntimeLookup, timeoutMs = 3
     if (snapshot?.url != null) return snapshot;
     await new Promise((resolveWait) => setTimeout(resolveWait, 150));
   }
-  throw new Error("web did not expose status in time");
+  throw ToolDevError.runtimeStartupTimeout(APP_KEYS.WEB);
 }
 
 export async function inspectDesktopRuntime(runtime: AppRuntimeLookup, timeoutMs = 800): Promise<DesktopStatusSnapshot | null> {
@@ -76,5 +78,5 @@ export async function waitForDesktopRuntime(runtime: AppRuntimeLookup, timeoutMs
     if (snapshot != null) return snapshot;
     await new Promise((resolveWait) => setTimeout(resolveWait, 150));
   }
-  throw new Error("desktop did not expose status in time");
+  throw ToolDevError.runtimeStartupTimeout(APP_KEYS.DESKTOP);
 }

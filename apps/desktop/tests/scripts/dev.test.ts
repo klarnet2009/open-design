@@ -14,8 +14,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createDesktopElectronEnv,
   resolveDesktopMainEntryPath,
-  runDesktopDevLauncher,
-} from '../sidecar/dev-launcher.js';
+  runDesktopDev,
+} from '../../scripts/dev.js';
 
 function createDesktopStampArgs(ipcPath: string): string[] {
   return createProcessStampArgs(
@@ -23,21 +23,21 @@ function createDesktopStampArgs(ipcPath: string): string[] {
       app: APP_KEYS.DESKTOP,
       ipc: ipcPath,
       mode: SIDECAR_MODES.DEV,
-      namespace: 'desktop-dev-launcher-test',
+      namespace: 'desktop-scripts-dev-test',
       source: SIDECAR_SOURCES.TOOLS_DEV,
     },
     OPEN_DESIGN_SIDECAR_CONTRACT,
   );
 }
 
-describe('desktop dev launcher', () => {
+describe('desktop dev script', () => {
   it('strips Electron-as-Node env before launching Electron', () => {
     expect(createDesktopElectronEnv({ ELECTRON_RUN_AS_NODE: '1', KEEP: 'yes' })).toEqual({ KEEP: 'yes' });
     expect(createDesktopElectronEnv({ Electron_Run_As_Node: '1', KEEP: 'yes' })).toEqual({ KEEP: 'yes' });
   });
 
   it('builds desktop and launches Electron with the same sidecar stamp args', async () => {
-    const packageRoot = await mkdtemp(join(tmpdir(), 'open-design-desktop-dev-launcher-'));
+    const packageRoot = await mkdtemp(join(tmpdir(), 'open-design-desktop-scripts-dev-'));
     const workspaceRoot = join(packageRoot, '..', '..');
     const stampArgs = createDesktopStampArgs(join(packageRoot, 'desktop.sock'));
     const runBuild = vi.fn(async () => undefined);
@@ -45,7 +45,7 @@ describe('desktop dev launcher', () => {
     const log = vi.fn();
 
     try {
-      const exit = await runDesktopDevLauncher({
+      const exit = await runDesktopDev({
         electronBinaryPath: '/electron',
         env: { ELECTRON_RUN_AS_NODE: '1', KEEP: 'yes' },
         log,
@@ -79,12 +79,12 @@ describe('desktop dev launcher', () => {
         app: APP_KEYS.WEB,
         ipc: '/tmp/web.sock',
         mode: SIDECAR_MODES.DEV,
-        namespace: 'desktop-dev-launcher-test',
+        namespace: 'desktop-scripts-dev-test',
         source: SIDECAR_SOURCES.TOOLS_DEV,
       },
       OPEN_DESIGN_SIDECAR_CONTRACT,
     );
 
-    await expect(runDesktopDevLauncher({ stampArgs })).rejects.toThrow(/requires desktop stamp/);
+    await expect(runDesktopDev({ stampArgs })).rejects.toThrow(/requires desktop stamp/);
   });
 });

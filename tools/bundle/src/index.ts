@@ -1,8 +1,11 @@
-import { cp, lstat, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { cp, lstat, mkdir, readFile, readdir, readlink, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { cac } from "cac";
+import { build as buildWithEsbuild } from "esbuild";
+import { createPackageManagerInvocation } from "@open-design/platform";
 import {
   BUNDLE_DESCRIPTOR_FILE,
   BUNDLE_DESCRIPTOR_SCHEMA_VERSION,
@@ -22,8 +25,15 @@ import {
 
 const WEB_APP = "web";
 const WEB_BUNDLE_KEY = "od:sidecar:web";
+const WEB_PACKAGE_NAME = "@open-design/web";
 const WEB_DEFAULT_ENTRY = "sidecar/index.ts";
+const WEB_RELEASE_ENTRY = "sidecar/index.mjs";
 const WEB_JS_ENTRY_CANDIDATES = ["sidecar/index.mjs", "sidecar/index.js"];
+const WEB_STANDALONE_BUNDLE_ROOT = "web/standalone";
+const WEB_STANDALONE_SOURCE_ROOT = path.join(".next", "standalone");
+const WEB_STATIC_SOURCE_ROOT = path.join(".next", "static");
+const WEB_PUBLIC_SOURCE_ROOT = "public";
+const WORKSPACE_MARKER_FILE = "pnpm-workspace.yaml";
 
 type BundleApp = typeof WEB_APP;
 
@@ -145,17 +155,44 @@ function normalizeRef(input: { key?: string; refOrVersion: string }): BundleRef 
   return validateBundleRef({ key, version });
 }
 
-async function assertDirectoryWithoutSymlinks(root: string): Promise<void> {
-  const info = await lstat(root);
-  if (!info.isDirectory()) throw new Error(`bundle source path must be a directory: ${root}`);
-  if (info.isSymbolicLink()) throw new Error(`bundle source path must not be a symlink: ${root}`);
+async function assertDirectoryRoot(root: string, label: string): Promise<void> {
+  let info;
+  try {
+    info = await lstat(root);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new Error(`${label} missing: ${root}`);
+    throw error;
+  }
+  if (!info.isDirectory()) throw new Error(`${label} must be a directory: ${root}`);
+  if (info.isSymbolicLink()) throw new Error(`${label} must not be a symlink: ${root}`);
+}
+
+async function assertDirectoryWithInternalSymlinks(root: string, label: string): Promise<void> {
+  await assertDirectoryRoot(root, label);
+  const realRoot = await realpath(root);
 
   async function walk(directory: string): Promise<void> {
     const entries = await readdir(directory, { withFileTypes: true });
     for (const entry of entries) {
       const entryPath = path.join(directory, entry.name);
       const child = await lstat(entryPath);
-      if (child.isSymbolicLink()) throw new Error(`bundle source tree must not contain symlinks: ${entryPath}`);
+      if (child.isSymbolicLink()) {
+        const target = await readlink(entryPath);
+        if (path.isAbsolute(target)) {
+          throw new Error(`${label} symlinks must be relative: ${entryPath}`);
+        }
+
+        let realTarget;
+        try {
+          realTarget = await realpath(entryPath);
+        } catch {
+          throw new Error(`${label} symlinks must not be broken: ${entryPath}`);
+        }
+        if (!containsPath(realRoot, realTarget)) {
+          throw new Error(`${label} symlinks must stay inside the bundle: ${entryPath}`);
+        }
+        continue;
+      }
       if (entry.isDirectory()) await walk(entryPath);
     }
   }
@@ -173,7 +210,7 @@ async function pathExists(filePath: string): Promise<boolean> {
   }
 }
 
-async function detectWebDescriptor(sourcePath: string): Promise<BundleArtifactDescriptor> {
+async function detectWebSourceDescriptor(sourcePath: string): Promise<BundleArtifactDescriptor> {
   if (await pathExists(path.join(sourcePath, WEB_DEFAULT_ENTRY))) {
     return {
       entry: { kind: "tsx", path: WEB_DEFAULT_ENTRY },
@@ -193,8 +230,325 @@ async function detectWebDescriptor(sourcePath: string): Promise<BundleArtifactDe
   throw new Error(`web bundle source must contain ${WEB_DEFAULT_ENTRY} or one of: ${WEB_JS_ENTRY_CANDIDATES.join(", ")}`);
 }
 
-async function descriptorForApp(app: BundleApp, sourcePath: string): Promise<BundleArtifactDescriptor> {
-  if (app === WEB_APP) return await detectWebDescriptor(sourcePath);
+function quoteCommandPart(value: string): string {
+  if (!/[\s"'$`\\]/.test(value)) return value;
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function commandLine(command: string, args: string[]): string {
+  return [command, ...args].map(quoteCommandPart).join(" ");
+}
+
+async function runPackageManager(workspaceRoot: string, args: string[], extraEnv: NodeJS.ProcessEnv): Promise<void> {
+  const invocation = createPackageManagerInvocation(args, process.env);
+  const startedAt = Date.now();
+  process.stderr.write(`[tools-bundle] run ${commandLine(invocation.command, invocation.args)}\n`);
+
+  await new Promise<void>((resolveCommand, rejectCommand) => {
+    const child = spawn(invocation.command, invocation.args, {
+      cwd: workspaceRoot,
+      env: { ...process.env, ...extraEnv },
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+    });
+    child.stdout?.on("data", (chunk: Buffer) => process.stderr.write(chunk));
+    child.stderr?.on("data", (chunk: Buffer) => process.stderr.write(chunk));
+    child.once("error", rejectCommand);
+    child.once("close", (code, signal) => {
+      if (code === 0 && signal == null) {
+        resolveCommand();
+        return;
+      }
+      const suffix = signal == null ? `exit code ${code ?? "unknown"}` : `signal ${signal}`;
+      rejectCommand(new Error(`command failed with ${suffix}: ${commandLine(invocation.command, invocation.args)}`));
+    });
+  });
+
+  process.stderr.write(`[tools-bundle] done ${commandLine(invocation.command, invocation.args)} durationMs=${Date.now() - startedAt}\n`);
+}
+
+async function findWorkspaceRoot(startPath: string): Promise<string | null> {
+  let current = path.resolve(startPath);
+  while (true) {
+    if (await pathExists(path.join(current, WORKSPACE_MARKER_FILE))) return current;
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
+async function readPackageName(packageRoot: string): Promise<string | null> {
+  const packageJsonPath = path.join(packageRoot, "package.json");
+  try {
+    const value = JSON.parse(await readFile(packageJsonPath, "utf8")) as { name?: unknown };
+    return typeof value.name === "string" ? value.name : null;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function buildWebStandaloneIfWorkspaceSource(sourcePath: string): Promise<void> {
+  const [packageName, workspaceRoot] = await Promise.all([
+    readPackageName(sourcePath),
+    findWorkspaceRoot(sourcePath),
+  ]);
+  if (packageName !== WEB_PACKAGE_NAME || workspaceRoot == null) return;
+  await runPackageManager(workspaceRoot, ["--filter", WEB_PACKAGE_NAME, "build"], {
+    OD_WEB_OUTPUT_MODE: "standalone",
+  });
+}
+
+async function assertSidecarEntryFile(entryPath: string): Promise<void> {
+  const info = await lstat(entryPath);
+  if (info.isSymbolicLink()) throw new Error(`web sidecar entry must not be a symlink: ${entryPath}`);
+  if (!info.isFile()) throw new Error(`web sidecar entry must be a file: ${entryPath}`);
+}
+
+async function emitWebSidecarEntry(input: {
+  outPath: string;
+  sourceDescriptor: BundleArtifactDescriptor;
+  sourcePath: string;
+}): Promise<BundleArtifactDescriptor> {
+  const sourceEntryPath = path.join(input.sourcePath, input.sourceDescriptor.entry.path);
+  await assertSidecarEntryFile(sourceEntryPath);
+
+  if (input.sourceDescriptor.entry.kind === "js") {
+    const outfile = path.join(input.outPath, input.sourceDescriptor.entry.path);
+    await mkdir(path.dirname(outfile), { recursive: true });
+    await cp(sourceEntryPath, outfile, { dereference: true });
+    return input.sourceDescriptor;
+  }
+
+  const outfile = path.join(input.outPath, WEB_RELEASE_ENTRY);
+  await mkdir(path.dirname(outfile), { recursive: true });
+  await buildWithEsbuild({
+    bundle: true,
+    entryPoints: [path.join(input.sourcePath, input.sourceDescriptor.entry.path)],
+    format: "esm",
+    outfile,
+    platform: "node",
+    sourcemap: true,
+    target: "node24",
+  });
+  return {
+    entry: { kind: "js", path: WEB_RELEASE_ENTRY },
+    schemaVersion: BUNDLE_DESCRIPTOR_SCHEMA_VERSION,
+  };
+}
+
+async function resolveStandaloneSourceWebRoot(standaloneRoot: string): Promise<string> {
+  const nestedRoot = path.join(standaloneRoot, "apps", "web");
+  if (await pathExists(path.join(nestedRoot, "server.js"))) return nestedRoot;
+  if (await pathExists(path.join(standaloneRoot, "server.js"))) return standaloneRoot;
+  throw new Error(`Next.js standalone server output missing under ${standaloneRoot}`);
+}
+
+async function requireWebStandaloneOutput(sourcePath: string): Promise<{
+  sourceWebRoot: string;
+  standaloneRoot: string;
+}> {
+  const standaloneRoot = path.join(sourcePath, WEB_STANDALONE_SOURCE_ROOT);
+  await assertDirectoryRoot(standaloneRoot, "Next.js standalone output");
+  return {
+    sourceWebRoot: await resolveStandaloneSourceWebRoot(standaloneRoot),
+    standaloneRoot,
+  };
+}
+
+async function copyRequiredDirectory(
+  sourcePath: string,
+  destinationPath: string,
+  label: string,
+  options: { preserveSymlinks?: boolean } = {},
+): Promise<void> {
+  let info;
+  try {
+    info = await stat(sourcePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`${label} missing: ${sourcePath}`);
+    }
+    throw error;
+  }
+  if (!info.isDirectory()) throw new Error(`${label} must be a directory: ${sourcePath}`);
+
+  await rm(destinationPath, { force: true, recursive: true });
+  await mkdir(path.dirname(destinationPath), { recursive: true });
+  await cp(sourcePath, destinationPath, {
+    dereference: options.preserveSymlinks !== true,
+    recursive: true,
+    verbatimSymlinks: options.preserveSymlinks === true,
+  });
+}
+
+async function copyOptionalDirectory(
+  sourcePath: string,
+  destinationPath: string,
+  label: string,
+  options: { preserveSymlinks?: boolean } = {},
+): Promise<void> {
+  if (!(await pathExists(sourcePath))) return;
+  await copyRequiredDirectory(sourcePath, destinationPath, label, options);
+}
+
+function webStandaloneBundleRoot(outPath: string): string {
+  return path.join(outPath, ...WEB_STANDALONE_BUNDLE_ROOT.split("/"));
+}
+
+async function linkRelative(sourcePath: string, destinationPath: string): Promise<boolean> {
+  if (await pathExists(destinationPath)) return false;
+  await mkdir(path.dirname(destinationPath), { recursive: true });
+  const relativeTarget = path.relative(path.dirname(destinationPath), sourcePath);
+  await symlink(relativeTarget.length === 0 ? "." : relativeTarget, destinationPath);
+  return true;
+}
+
+async function linkPnpmPublicHoist(destinationRoot: string): Promise<void> {
+  const nodeModulesRoot = path.join(destinationRoot, "node_modules");
+  const hoistRoot = path.join(nodeModulesRoot, ".pnpm", "node_modules");
+  const entries = await readdir(hoistRoot, { withFileTypes: true }).catch(() => []);
+
+  for (const entry of entries) {
+    const sourcePath = path.join(hoistRoot, entry.name);
+    if (entry.name.startsWith("@") && entry.isDirectory()) {
+      const scopedEntries = await readdir(sourcePath).catch(() => []);
+      for (const scopedEntry of scopedEntries) {
+        await linkRelative(
+          path.join(sourcePath, scopedEntry),
+          path.join(nodeModulesRoot, entry.name, scopedEntry),
+        );
+      }
+      continue;
+    }
+
+    await linkRelative(sourcePath, path.join(nodeModulesRoot, entry.name));
+  }
+}
+
+async function removePath(targetPath: string): Promise<void> {
+  await rm(targetPath, { force: true, recursive: true });
+}
+
+function isPrunablePnpmSharpEntry(name: string): boolean {
+  return name.startsWith("sharp@") || name.startsWith("@img+colour@") || name.startsWith("@img+sharp-");
+}
+
+function isPrunableImgEntry(name: string): boolean {
+  return name === "colour" || name.startsWith("sharp-");
+}
+
+async function pruneImgScope(scopePath: string): Promise<void> {
+  const entries = await readdir(scopePath).catch(() => []);
+  for (const entry of entries) {
+    if (isPrunableImgEntry(entry)) await removePath(path.join(scopePath, entry));
+  }
+}
+
+async function pruneSharp(destinationRoot: string): Promise<void> {
+  const nodeModulesRoot = path.join(destinationRoot, "node_modules");
+  const pnpmRoot = path.join(nodeModulesRoot, ".pnpm");
+
+  await removePath(path.join(nodeModulesRoot, "sharp"));
+  await pruneImgScope(path.join(nodeModulesRoot, "@img"));
+  await removePath(path.join(pnpmRoot, "node_modules", "sharp"));
+  await pruneImgScope(path.join(pnpmRoot, "node_modules", "@img"));
+
+  const pnpmEntries = await readdir(pnpmRoot).catch(() => []);
+  for (const entry of pnpmEntries) {
+    if (isPrunablePnpmSharpEntry(entry)) {
+      await removePath(path.join(pnpmRoot, entry));
+      continue;
+    }
+
+    if (entry.startsWith("next@")) {
+      await removePath(path.join(pnpmRoot, entry, "node_modules", "sharp"));
+    }
+  }
+}
+
+function isSourceBuildResidue(relativePath: string): boolean {
+  const normalized = relativePath.split(path.sep).join("/");
+  return normalized.endsWith(".map") || normalized.endsWith(".tsbuildinfo");
+}
+
+async function pruneSourceBuildResidue(root: string): Promise<void> {
+  async function walk(current: string): Promise<void> {
+    const info = await lstat(current).catch(() => null);
+    if (info == null || info.isSymbolicLink()) return;
+    if (info.isDirectory()) {
+      const entries = await readdir(current, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries) await walk(path.join(current, entry.name));
+      return;
+    }
+
+    const relativePath = path.relative(root, current);
+    if (relativePath.length > 0 && isSourceBuildResidue(relativePath)) await rm(current, { force: true });
+  }
+
+  await walk(root);
+}
+
+async function pruneBrokenSymlinks(root: string): Promise<void> {
+  async function walk(current: string): Promise<void> {
+    const info = await lstat(current).catch(() => null);
+    if (info == null) return;
+    if (info.isSymbolicLink()) {
+      try {
+        await stat(current);
+      } catch {
+        await removePath(current);
+      }
+      return;
+    }
+    if (!info.isDirectory()) return;
+
+    const entries = await readdir(current, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) await walk(path.join(current, entry.name));
+  }
+
+  await walk(root);
+}
+
+async function pruneWebStandaloneRuntime(destinationRoot: string): Promise<void> {
+  await pruneSharp(destinationRoot);
+  await pruneSourceBuildResidue(destinationRoot);
+  await pruneBrokenSymlinks(destinationRoot);
+}
+
+async function copyWebStandaloneRuntime(sourcePath: string, outPath: string): Promise<void> {
+  const { sourceWebRoot, standaloneRoot } = await requireWebStandaloneOutput(sourcePath);
+  const destinationRoot = webStandaloneBundleRoot(outPath);
+  const preserveSymlinks = process.platform !== "win32";
+  await copyRequiredDirectory(standaloneRoot, destinationRoot, "Next.js standalone output", { preserveSymlinks });
+
+  const relativeWebRoot = path.relative(standaloneRoot, sourceWebRoot);
+  const destinationWebRoot = path.join(destinationRoot, relativeWebRoot);
+  await copyRequiredDirectory(
+    path.join(sourcePath, WEB_STATIC_SOURCE_ROOT),
+    path.join(destinationWebRoot, ".next", "static"),
+    "Next.js static assets",
+    { preserveSymlinks },
+  );
+  await copyOptionalDirectory(
+    path.join(sourcePath, WEB_PUBLIC_SOURCE_ROOT),
+    path.join(destinationWebRoot, "public"),
+    "web public assets",
+    { preserveSymlinks },
+  );
+  await linkPnpmPublicHoist(destinationRoot);
+  await pruneWebStandaloneRuntime(destinationRoot);
+  await assertDirectoryWithInternalSymlinks(destinationRoot, "packed web standalone runtime");
+}
+
+async function releaseDescriptorForApp(app: BundleApp, sourcePath: string, outPath: string): Promise<BundleArtifactDescriptor> {
+  if (app !== WEB_APP) throw new Error(`unsupported bundle app: ${app}`);
+  return await emitWebSidecarEntry({
+    outPath,
+    sourceDescriptor: await detectWebSourceDescriptor(sourcePath),
+    sourcePath,
+  });
 }
 
 export async function validateBundlePath(bundlePath: string): Promise<BundleArtifact> {
@@ -209,27 +563,36 @@ export async function packBundle(input: PackBundleInput): Promise<BundleArtifact
     throw new Error("bundle output path must not overlap the source path");
   }
 
-  await assertDirectoryWithoutSymlinks(sourcePath);
-  if (await pathExists(outPath)) {
+  await assertDirectoryRoot(sourcePath, "bundle source path");
+  const outputAlreadyExists = await pathExists(outPath);
+  if (outputAlreadyExists) {
     if (input.replace !== true) throw new Error(`bundle output already exists: ${outPath}`);
+  }
+  await buildWebStandaloneIfWorkspaceSource(sourcePath);
+  if (outputAlreadyExists) {
     await rm(outPath, { force: true, recursive: true });
   }
 
   await mkdir(path.dirname(outPath), { recursive: true });
-  await cp(sourcePath, outPath, { recursive: true });
-  const descriptor = await descriptorForApp(app, sourcePath);
+  await mkdir(outPath, { recursive: true });
+  await copyWebStandaloneRuntime(sourcePath, outPath);
+  const descriptor = await releaseDescriptorForApp(app, sourcePath, outPath);
+  // Source roots may carry a dev bundle.json; packed bundles always get a
+  // release descriptor selected by tools-bundle.
   await writeFile(path.join(outPath, BUNDLE_DESCRIPTOR_FILE), `${JSON.stringify(descriptor, null, 2)}\n`, "utf8");
+  await assertDirectoryWithInternalSymlinks(outPath, "packed bundle");
   return await validateBundlePath(outPath);
 }
 
 export async function addBundleToStore(input: StoreBundleInput): Promise<BundleResolved> {
-  await validateBundlePath(input.bundlePath);
+  const bundlePath = path.resolve(input.bundlePath);
+  await validateBundlePath(bundlePath);
   const ref = validateBundleRef({ key: input.key ?? WEB_BUNDLE_KEY, version: input.version });
   const write = input.replace === true ? replaceBundle : addBundle;
   return await write({
     basePath: path.resolve(input.basePath),
     ref,
-    sourcePath: path.resolve(input.bundlePath),
+    sourcePath: bundlePath,
   });
 }
 

@@ -15,30 +15,39 @@ const startDaemonRuntime = vi.fn(async () => ({
   stop: stopRuntime,
   url: 'http://127.0.0.1:48123',
 }));
-const prepareDaemonSidecarDevRuntime = vi.fn(async () => null);
+const desktopAuth = vi.hoisted(() => {
+  let gateActive = false;
+  return {
+    isDesktopAuthGateActive: vi.fn(() => gateActive),
+    reset() {
+      gateActive = false;
+    },
+    setDesktopAuthSecret: vi.fn((secret: Buffer | null) => {
+      if (secret != null) gateActive = true;
+    }),
+  };
+});
 
-vi.mock('../src/daemon-startup.js', () => ({
+vi.mock('#daemon-startup', () => ({
   startDaemonRuntime,
 }));
-vi.mock('../src/sidecar/dev-runtime.js', () => ({
-  prepareDaemonSidecarDevRuntime,
+vi.mock('#desktop-auth', () => ({
+  isDesktopAuthGateActive: desktopAuth.isDesktopAuthGateActive,
+  setDesktopAuthSecret: desktopAuth.setDesktopAuthSecret,
 }));
 
 describe('daemon sidecar startup', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    const { resetDesktopAuthForTests } = await import('../src/desktop-auth.js');
-    resetDesktopAuthForTests();
+    desktopAuth.reset();
   });
 
   afterEach(async () => {
-    const { resetDesktopAuthForTests } = await import('../src/desktop-auth.js');
-    resetDesktopAuthForTests();
+    desktopAuth.reset();
   });
 
   it('starts through the shared daemon startup path and reports live auth state', async () => {
-    const { setDesktopAuthSecret } = await import('../src/desktop-auth.js');
-    const { startDaemonSidecar } = await import('../src/sidecar/server.js');
+    const { startDaemonSidecar } = await import('../sidecar/server.js');
     const root = await mkdtemp(join(tmpdir(), 'od-daemon-sidecar-'));
     const handle = await startDaemonSidecar({
       app: APP_KEYS.DAEMON,
@@ -53,18 +62,12 @@ describe('daemon sidecar startup', () => {
       expect(startDaemonRuntime).toHaveBeenCalledWith(
         expect.objectContaining({ port: 0 }),
       );
-      expect(prepareDaemonSidecarDevRuntime).toHaveBeenCalledWith({
-        runtime: expect.objectContaining({
-          mode: SIDECAR_MODES.DEV,
-          source: SIDECAR_SOURCES.TOOLS_DEV,
-        }),
-      });
       const initial = await handle.status();
       expect(initial.state).toBe('running');
       expect(initial.url).toBe('http://127.0.0.1:48123');
       expect(initial.desktopAuthGateActive).toBe(false);
 
-      setDesktopAuthSecret(randomBytes(32));
+      desktopAuth.setDesktopAuthSecret(randomBytes(32));
       const afterAuth = await handle.status();
       expect(afterAuth.desktopAuthGateActive).toBe(true);
     } finally {

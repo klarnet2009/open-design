@@ -37,7 +37,7 @@ export function resolveDesktopPackageRoot(moduleUrl = import.meta.url): string {
       if (packageJson.name === "@open-design/desktop") return current;
     } catch {
       // Keep walking until the package root is found. This must work from
-      // source under tsx and from dist if the launcher is built directly.
+      // source under tsx and from dist if the script is built directly.
     }
 
     const parent = dirname(current);
@@ -136,7 +136,7 @@ export async function spawnDesktopElectron(request: DesktopElectronLaunchRequest
   }
 }
 
-export async function runDesktopDevLauncher(options: {
+export async function runDesktopDev(options: {
   electronBinaryPath?: string;
   env?: NodeJS.ProcessEnv;
   log?: (line: string) => void;
@@ -150,7 +150,7 @@ export async function runDesktopDevLauncher(options: {
   const stamp = readProcessStamp(stampArgs, OPEN_DESIGN_SIDECAR_CONTRACT);
   if (stamp == null) throw new Error("sidecar stamp is required");
   if (stamp.app !== APP_KEYS.DESKTOP) {
-    throw new Error(`desktop dev launcher requires desktop stamp, received ${stamp.app}`);
+    throw new Error(`desktop dev script requires desktop stamp, received ${stamp.app}`);
   }
 
   const packageRoot = options.packageRoot ?? resolveDesktopPackageRoot();
@@ -190,7 +190,7 @@ function isDirectEntry(): boolean {
 }
 
 if (isDirectEntry()) {
-  void runDesktopDevLauncher().catch((error: unknown) => {
+  void runDesktopDev().catch((error: unknown) => {
     console.error(error instanceof Error ? error.stack || error.message : String(error));
     process.exit(1);
   });

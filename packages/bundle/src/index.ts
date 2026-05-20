@@ -5,6 +5,7 @@ import {
   mkdir,
   readdir,
   readFile,
+  readlink,
   realpath,
   rename,
   rm,
@@ -324,10 +325,11 @@ async function writeBundleStore(basePath: string, metadata: BundleStoreMetadata)
   await writeJsonAtomic(paths.metadataPath, metadata);
 }
 
-async function assertDirectoryWithoutSymlinks(root: string): Promise<void> {
+async function assertDirectoryWithInternalSymlinks(root: string): Promise<void> {
   const info = await lstat(root);
   if (!info.isDirectory()) throw new BundleStoreError("bundle-source-not-directory", "bundle source path must be a directory");
   if (info.isSymbolicLink()) throw new BundleStoreError("bundle-source-symlink", "bundle source path must not be a symlink");
+  const realRoot = await realpath(root);
 
   async function walk(directory: string): Promise<void> {
     const entries = await readdir(directory, { withFileTypes: true });
@@ -335,7 +337,21 @@ async function assertDirectoryWithoutSymlinks(root: string): Promise<void> {
       const path = join(directory, entry.name);
       const child = await lstat(path);
       if (child.isSymbolicLink()) {
-        throw new BundleStoreError("bundle-source-symlink", "bundle source tree must not contain symlinks");
+        const target = await readlink(path);
+        if (isAbsolute(target)) {
+          throw new BundleStoreError("bundle-source-symlink", "bundle source symlinks must be relative");
+        }
+
+        let realTarget;
+        try {
+          realTarget = await realpath(path);
+        } catch {
+          throw new BundleStoreError("bundle-source-symlink", "bundle source symlinks must not be broken");
+        }
+        if (!containsPath(realRoot, realTarget)) {
+          throw new BundleStoreError("bundle-source-symlink", "bundle source symlinks must stay inside the source tree");
+        }
+        continue;
       }
       if (entry.isDirectory()) await walk(path);
     }
@@ -360,6 +376,8 @@ async function digestDirectory(root: string): Promise<string> {
         await walk(path);
       } else if (entry.isFile()) {
         hash.update(await readFile(path));
+      } else if (entry.isSymbolicLink()) {
+        hash.update(await readlink(path));
       } else {
         throw new BundleStoreError("bundle-source-invalid-entry", `unsupported bundle source entry: ${rel}`);
       }
@@ -414,7 +432,7 @@ export async function addBundle(input: BundleWriteInput): Promise<BundleResolved
   const ref = validateBundleRef(input.ref);
   const paths = bundleStorePaths(input.basePath);
   const sourcePath = resolveAbsolutePath(input.sourcePath, "bundle source path");
-  await assertDirectoryWithoutSymlinks(sourcePath);
+  await assertDirectoryWithInternalSymlinks(sourcePath);
   const metadata = await readBundleStore(paths.basePath);
   if (metadata.bundles.some((entry) => bundleRefsEqual(entry.ref, ref))) {
     throw new BundleStoreError("bundle-already-exists", `bundle already exists for ${ref.key} ${ref.version}`);
@@ -424,7 +442,7 @@ export async function addBundle(input: BundleWriteInput): Promise<BundleResolved
   const stagingPath = join(paths.basePath, BUNDLE_STAGING_DIR, operationId());
   const finalPath = objectContentPath(paths.basePath, ref);
   await mkdir(resolve(stagingPath, ".."), { recursive: true });
-  await cp(sourcePath, stagingPath, { recursive: true });
+  await cp(sourcePath, stagingPath, { recursive: true, verbatimSymlinks: true });
   await mkdir(resolve(finalPath, ".."), { recursive: true });
   await rename(stagingPath, finalPath);
 
@@ -448,7 +466,7 @@ export async function replaceBundle(input: BundleWriteInput): Promise<BundleReso
   const ref = validateBundleRef(input.ref);
   const paths = bundleStorePaths(input.basePath);
   const sourcePath = resolveAbsolutePath(input.sourcePath, "bundle source path");
-  await assertDirectoryWithoutSymlinks(sourcePath);
+  await assertDirectoryWithInternalSymlinks(sourcePath);
   const metadata = await readBundleStore(paths.basePath);
   const existing = metadata.bundles.find((entry) => bundleRefsEqual(entry.ref, ref));
   const existingPath = existing == null ? null : entryPath(paths.basePath, existing);
@@ -457,7 +475,7 @@ export async function replaceBundle(input: BundleWriteInput): Promise<BundleReso
   const stagingPath = join(paths.basePath, BUNDLE_STAGING_DIR, operationId());
   const finalPath = objectContentPath(paths.basePath, ref);
   await mkdir(resolve(stagingPath, ".."), { recursive: true });
-  await cp(sourcePath, stagingPath, { recursive: true });
+  await cp(sourcePath, stagingPath, { recursive: true, verbatimSymlinks: true });
   await mkdir(resolve(finalPath, ".."), { recursive: true });
   await rename(stagingPath, finalPath);
 

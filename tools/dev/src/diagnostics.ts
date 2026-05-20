@@ -1,3 +1,5 @@
+import { ToolDevError } from "./lib/errors.js";
+
 export type LogDiagnostic = {
   message: string;
   recommendation: string;
@@ -68,5 +70,5 @@ export function appendStartupLogDiagnostics(error: unknown, appName: string, det
   const formattedDiagnostics = formatLogDiagnostics(details.diagnostics);
   if (formattedDiagnostics != null) sections.push(formattedDiagnostics);
 
-  return new Error(sections.join("\n\n"), error instanceof Error ? { cause: error } : undefined);
+  return ToolDevError.startupDiagnostics(sections.join("\n\n"), error);
 }

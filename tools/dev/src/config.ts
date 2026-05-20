@@ -10,13 +10,15 @@ import {
 } from "@open-design/sidecar-proto";
 import {
   resolveAppIpcPath,
-  resolveAppRuntimePath,
   resolveLogFilePath,
   resolveNamespace,
   resolveNamespaceRoot,
   resolveSidecarBase,
   resolveSourceRuntimeRoot,
 } from "@open-design/sidecar";
+
+import { ToolDevError } from "./lib/errors.js";
+import { ensure } from "./lib/ensure.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -49,15 +51,13 @@ export type ToolDevAppConfig = {
 export type ToolDevConfig = {
   apps: {
     daemon: ToolDevAppConfig & {
-      sidecarEntryPath: string;
+      launchEntryPath: string;
     };
     desktop: ToolDevAppConfig & {
-      sidecarEntryPath: string;
+      launchEntryPath: string;
     };
     web: ToolDevAppConfig & {
-      nextDistDir: string;
-      nextTsconfigPath: string;
-      sidecarEntryPath: string;
+      launchEntryPath: string;
     };
   };
   bundlePath: string | null;
@@ -97,7 +97,7 @@ export function isAppName(value: string): value is ToolDevAppName {
 }
 
 function unsupportedAppError(value: string): Error {
-  return new Error(`unsupported tools-dev app: ${value} (expected one of: ${ALL_APPS.join(", ")})`);
+  return ToolDevError.unsupportedApp(value, ALL_APPS);
 }
 
 export function resolveTargetApps(appName: string | undefined, defaults: readonly ToolDevAppName[]): ToolDevAppName[] {
@@ -130,9 +130,8 @@ export function resolveStopApps(appName: string | undefined): ToolDevAppName[] {
 export function parsePortOption(value: number | string | null | undefined, optionName: string): number | null {
   if (value == null || value === "") return null;
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65535) {
-    throw new Error(`${optionName} must be an integer between 1 and 65535`);
-  }
+  ensure(Number.isInteger(parsed) && parsed > 0 && parsed <= 65535)
+    .or(() => ToolDevError.invalidOption(optionName, "must be an integer between 1 and 65535"));
   return parsed;
 }
 
@@ -158,17 +157,15 @@ export function resolveToolDevConfig(options: ToolDevOptions = {}): ToolDevConfi
     apps: {
       daemon: {
         ...daemon,
-        sidecarEntryPath: path.join(WORKSPACE_ROOT, "apps/daemon/src/sidecar/index.ts"),
+        launchEntryPath: path.join(WORKSPACE_ROOT, "apps/daemon/scripts/dev.ts"),
       },
       desktop: {
         ...desktop,
-        sidecarEntryPath: path.join(WORKSPACE_ROOT, "apps/desktop/sidecar/dev-launcher.ts"),
+        launchEntryPath: path.join(WORKSPACE_ROOT, "apps/desktop/scripts/dev.ts"),
       },
       web: {
         ...web,
-        nextDistDir: resolveAppRuntimePath({ app: APP_KEYS.WEB, namespaceRoot, fileName: "next", contract: OPEN_DESIGN_SIDECAR_CONTRACT }),
-        nextTsconfigPath: resolveAppRuntimePath({ app: APP_KEYS.WEB, namespaceRoot, fileName: "tsconfig.json", contract: OPEN_DESIGN_SIDECAR_CONTRACT }),
-        sidecarEntryPath: path.join(WORKSPACE_ROOT, "apps/web/sidecar/index.ts"),
+        launchEntryPath: path.join(WORKSPACE_ROOT, "apps/web/sidecar/index.ts"),
       },
     },
     bundlePath: options.bundlePath == null || options.bundlePath.length === 0 ? null : path.resolve(options.bundlePath),

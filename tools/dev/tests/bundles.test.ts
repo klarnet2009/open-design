@@ -19,24 +19,22 @@ async function makeTempConfig(): Promise<ToolDevConfig> {
         app: "daemon",
         ipcPath: path.join(root, "daemon.sock"),
         latestLogPath: path.join(root, "logs", "daemon", "latest.log"),
+        launchEntryPath: path.join(root, "daemon-sidecar.ts"),
         logDir: path.join(root, "logs", "daemon"),
-        sidecarEntryPath: path.join(root, "daemon-sidecar.ts"),
       },
       desktop: {
         app: "desktop",
         ipcPath: path.join(root, "desktop.sock"),
         latestLogPath: path.join(root, "logs", "desktop", "latest.log"),
+        launchEntryPath: path.join(root, "desktop", "scripts", "dev.ts"),
         logDir: path.join(root, "logs", "desktop"),
-        sidecarEntryPath: path.join(root, "desktop-dev-launcher.ts"),
       },
       web: {
         app: "web",
         ipcPath: path.join(root, "web.sock"),
         latestLogPath: path.join(root, "logs", "web", "latest.log"),
+        launchEntryPath: path.join(root, "workspace", "apps", "web", "sidecar", "index.ts"),
         logDir: path.join(root, "logs", "web"),
-        nextDistDir: path.join(root, "runtime", "web", "next"),
-        nextTsconfigPath: path.join(root, "runtime", "web", "tsconfig.json"),
-        sidecarEntryPath: path.join(root, "workspace", "apps", "web", "sidecar", "index.ts"),
       },
     },
     bundlePath: null,
@@ -75,7 +73,7 @@ describe("tools-dev direct bundle consumption", () => {
     const implementation = await resolveWebImplementation(config);
 
     assert.equal(implementation.entryKind, "tsx");
-    assert.equal(implementation.entryPath, config.apps.web.sidecarEntryPath);
+    assert.equal(implementation.entryPath, config.apps.web.launchEntryPath);
     assert.equal(implementation.implementation, null);
     assert.deepEqual(implementation.source, { type: "workspace" });
   });

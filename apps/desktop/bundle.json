@@ -1,0 +1,7 @@
+{
+  "entry": {
+    "kind": "tsx",
+    "path": "scripts/dev.ts"
+  },
+  "schemaVersion": 1
+}
