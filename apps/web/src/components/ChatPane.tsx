@@ -1,12 +1,13 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackChatPanelClick } from '../analytics/events';
-import { useT } from '../i18n';
+import { useI18n } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';
+import { applyPlugin, listPlugins } from '../state/projects';
 import type { TodoItem } from '../runtime/todos';
-import type { AppliedPluginSnapshot } from '@open-design/contracts';
+import type { AppliedPluginSnapshot, InstalledPluginRecord } from '@open-design/contracts';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import {
   DESIGN_SYSTEM_WORKSPACE_DISPLAY_DESCRIPTION,
@@ -26,6 +27,7 @@ import {
 } from './ChatComposer';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { Icon } from './Icon';
+import { PluginDetailsModal } from './PluginDetailsModal';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -354,7 +356,7 @@ export function ChatPane({
   byokImageModel,
   onChangeByokImageModel,
 }: Props) {
-  const t = useT();
+  const { locale, t } = useI18n();
   const analytics = useAnalytics();
   const logRef = useRef<HTMLDivElement | null>(null);
   const historyWrapRef = useRef<HTMLDivElement | null>(null);
@@ -371,6 +373,8 @@ export function ChatPane({
   const [tab, setTab] = useState<Tab>('chat');
   const [showConvList, setShowConvList] = useState(false);
   const [scrolledFromBottom, setScrolledFromBottom] = useState(false);
+  const [installedPlugins, setInstalledPlugins] = useState<InstalledPluginRecord[]>([]);
+  const [pluginDetailsRecord, setPluginDetailsRecord] = useState<InstalledPluginRecord | null>(null);
   // The user can dismiss the pinned task list once everything is complete.
   // We key the dismissal on the snapshot (serialized TodoWrite input) so
   // the next time the agent emits a different snapshot the card returns,
@@ -384,6 +388,9 @@ export function ChatPane({
   // plugin is project-scoped so re-stamping it on every reply would be
   // noise. Subsequent messages still run under the same snapshot.
   const firstUserMessageId = messages.find((m) => m.role === 'user')?.id;
+  const activePluginRecord = activePluginSnapshot
+    ? installedPlugins.find((plugin) => plugin.id === activePluginSnapshot.pluginId) ?? null
+    : null;
   // Map each assistant message id to the user message that follows it
   // (if any) so QuestionFormView can render its locked "answered" state
   // with the user's picks.
@@ -406,6 +413,18 @@ export function ChatPane({
     savedChatScrollRef.current = null;
     scrolledToFormRef.current = new Set();
   }, [activeConversationId]);
+
+  useEffect(() => {
+    if (!activePluginSnapshot?.pluginId) return;
+    let cancelled = false;
+    void listPlugins({ includeHidden: true }).then((rows) => {
+      if (cancelled) return;
+      setInstalledPlugins(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activePluginSnapshot?.pluginId]);
 
   // ChatComposer's internal `seededRef` latches after the first
   // non-empty `initialDraft`, so a parent setting `initialDraft` back
@@ -867,6 +886,8 @@ export function ChatPane({
                             ? activePluginSnapshot ?? null
                             : null
                         }
+                        activePluginRecord={activePluginRecord}
+                        onOpenActivePlugin={setPluginDetailsRecord}
                       />
                     ) : (
                       <AssistantMessage
@@ -962,6 +983,16 @@ export function ChatPane({
             onProjectSkillChange={onProjectSkillChange}
             pinnedPluginId={activePluginSnapshot?.pluginId ?? null}
           />
+          {pluginDetailsRecord ? (
+            <PluginDetailsModal
+              record={pluginDetailsRecord}
+              onClose={() => setPluginDetailsRecord(null)}
+              onUse={async (record) => {
+                await applyPlugin(record.id, { projectId: projectId ?? undefined, locale });
+                setPluginDetailsRecord(null);
+              }}
+            />
+          ) : null}
         </>
       ) : null}
     </div>
@@ -1242,6 +1273,8 @@ function UserMessage({
   onEditUserMessage,
   t,
   activePluginSnapshot,
+  activePluginRecord,
+  onOpenActivePlugin,
 }: {
   message: ChatMessage;
   projectId: string | null;
@@ -1250,6 +1283,8 @@ function UserMessage({
   onEditUserMessage?: (message: ChatMessage, nextPrompt: string) => Promise<void> | void;
   t: TranslateFn;
   activePluginSnapshot?: AppliedPluginSnapshot | null;
+  activePluginRecord?: InstalledPluginRecord | null;
+  onOpenActivePlugin?: (record: InstalledPluginRecord) => void;
 }) {
   const attachments = message.attachments ?? [];
   const commentAttachments = message.commentAttachments ?? [];
@@ -1304,7 +1339,11 @@ function UserMessage({
         <MessageTimestamp message={message} t={t} />
       </div>
       {activePluginSnapshot ? (
-        <ActivePluginChip snapshot={activePluginSnapshot} t={t} />
+        <ActivePluginChip
+          snapshot={activePluginSnapshot}
+          record={activePluginRecord ?? null}
+          onOpen={onOpenActivePlugin}
+        />
       ) : null}
       {attachments.length > 0 ? (
         <div className="user-attachments">
@@ -1436,27 +1475,55 @@ function UserMessage({
 // the run message it kicked off.
 function ActivePluginChip({
   snapshot,
-  t: _t,
+  record,
+  onOpen,
 }: {
   snapshot: AppliedPluginSnapshot;
-  t: TranslateFn;
+  record?: InstalledPluginRecord | null;
+  onOpen?: (record: InstalledPluginRecord) => void;
 }) {
   const title = snapshot.pluginTitle ?? snapshot.pluginId;
   const version = snapshot.pluginVersion;
   const taskKind = snapshot.taskKind;
-  return (
-    <div className="msg-plugin-chip" data-testid="msg-plugin-chip">
+  const tooltip = [
+    `Plugin: ${title}`,
+    version ? `Version: ${version}` : null,
+    taskKind ? `Task: ${humanPluginTaskKind(taskKind)}` : null,
+    record ? 'Click to view plugin details.' : 'Open Plugins to replace the project plugin.',
+  ].filter(Boolean).join('\n');
+  const content = (
+    <>
       <span className="msg-plugin-chip__dot" aria-hidden />
-      <span className="msg-plugin-chip__label">
-        <span className="msg-plugin-chip__kind">Plugin</span>
-        <span className="msg-plugin-chip__title">{title}</span>
-        <span className="msg-plugin-chip__version">@{version}</span>
-      </span>
-      {taskKind ? (
-        <span className="msg-plugin-chip__task">{taskKind}</span>
-      ) : null}
+      <span className="msg-plugin-chip__kind">Plugin</span>
+      <span className="msg-plugin-chip__title">{title}</span>
+    </>
+  );
+  if (record && onOpen) {
+    return (
+      <button
+        type="button"
+        className="msg-plugin-chip msg-plugin-chip--button"
+        data-testid="msg-plugin-chip"
+        title={tooltip}
+        onClick={() => onOpen(record)}
+      >
+        {content}
+      </button>
+    );
+  }
+  return (
+    <div className="msg-plugin-chip" data-testid="msg-plugin-chip" title={tooltip}>
+      {content}
     </div>
   );
+}
+
+function humanPluginTaskKind(taskKind: string): string {
+  if (taskKind === 'new-generation') return 'New generation';
+  if (taskKind === 'code-migration') return 'Code migration';
+  if (taskKind === 'figma-migration') return 'Figma migration';
+  if (taskKind === 'tune-collab') return 'Tune collaboration';
+  return taskKind;
 }
 
 function DaySeparator({ ts }: { ts: number | undefined }) {

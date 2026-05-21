@@ -2003,21 +2003,23 @@ a.avatar-item:visited {
   color: var(--text-muted);
   max-width: 100%;
 }
+.msg-plugin-chip--button {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+}
+.msg-plugin-chip--button:hover,
+.msg-plugin-chip--button:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--bg-panel);
+  color: var(--text);
+}
 .msg-plugin-chip__dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
   flex: 0 0 auto;
-}
-.msg-plugin-chip__label {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .msg-plugin-chip__kind {
   text-transform: uppercase;
@@ -2028,18 +2030,11 @@ a.avatar-item:visited {
 .msg-plugin-chip__title {
   color: var(--text);
   font-weight: 500;
+  min-width: 0;
+  max-width: min(60vw, 260px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.msg-plugin-chip__version,
-.msg-plugin-chip__task {
-  color: var(--text-faint);
-  font-variant-numeric: tabular-nums;
-}
-.msg-plugin-chip__task {
-  border-left: 1px solid var(--border);
-  padding-left: 8px;
 }
 
 /* Wrapper for user bubble + copy button */
