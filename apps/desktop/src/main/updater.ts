@@ -76,6 +76,7 @@ const DEFAULT_POLL_INITIAL_DELAY_MS = 5000;
 const DEFAULT_POLL_BACKOFF_INITIAL_MS = 60 * 1000;
 const DEFAULT_POLL_BACKOFF_MAX_MS = 30 * 60 * 1000;
 const MAC_DEFERRED_INSTALLER_TIMEOUT_MS = 10 * 60 * 1000;
+const WINDOWS_DEFERRED_INSTALLER_TIMEOUT_MS = 10 * 60 * 1000;
 const DESKTOP_UPDATE_CHANNEL_VALUES = new Set<string>(Object.values(DESKTOP_UPDATE_CHANNELS));
 
 export type DesktopUpdaterConfigInput = {
@@ -121,15 +122,15 @@ export type DesktopUpdaterDeps = {
   now?: () => Date;
   openPath?: (path: string) => Promise<string>;
   processPid?: number;
-  spawnDetached?: SpawnDetached;
+  spawnDetached?: SpawnInstallerHelper;
 };
 
 type DesktopUpdaterLogger = Pick<Console, "error" | "warn">;
 type DetachedProcess = { unref(): void };
-type SpawnDetached = (
+type SpawnInstallerHelper = (
   command: string,
   args: string[],
-  options: { detached: true; stdio: "ignore"; windowsHide: true },
+  options: { detached?: true; stdio: "ignore"; windowsHide: true },
 ) => DetachedProcess;
 
 export type DeferredInstallerLaunchInput = {
@@ -469,7 +470,8 @@ function isAllowedRootEntry(name: string): boolean {
     name === STORE_METADATA_FILE ||
     name === RELEASES_DIR ||
     name === STAGING_DIR ||
-    name === BACK_DIR;
+    name === BACK_DIR ||
+    name === HELPERS_DIR;
 }
 
 function isUpdateStoreMetadata(value: unknown): value is UpdateStoreMetadata {
@@ -587,7 +589,7 @@ async function ensureOwnedUpdateRoot(
       return { ok: false, error };
     }
 
-    for (const dirName of [RELEASES_DIR, STAGING_DIR, BACK_DIR]) {
+    for (const dirName of [RELEASES_DIR, STAGING_DIR, BACK_DIR, HELPERS_DIR]) {
       const path = join(realRoot, dirName);
       let entry;
       try {
@@ -974,9 +976,127 @@ exit 0
 `;
 }
 
+function windowsDeferredInstallerScript(): string {
+  return `param(
+  [Parameter(Mandatory = $true)]
+  [int]$TargetPid,
+
+  [Parameter(Mandatory = $true)]
+  [string]$InstallerPath,
+
+  [Parameter(Mandatory = $true)]
+  [int]$TimeoutMs,
+
+  [Parameter(Mandatory = $true)]
+  [string]$LogPath
+)
+
+$ErrorActionPreference = "Stop"
+
+function Write-HelperLog {
+  param([string]$Message)
+  try {
+    Add-Content -LiteralPath $LogPath -Value ("{0:o} {1}" -f (Get-Date), $Message)
+  } catch {
+  }
+}
+
+try {
+  Write-HelperLog ("armed for pid={0} installer={1}" -f $TargetPid, $InstallerPath)
+  $deadline = (Get-Date).AddMilliseconds($TimeoutMs)
+  while ($null -ne (Get-Process -Id $TargetPid -ErrorAction SilentlyContinue)) {
+    if ((Get-Date) -ge $deadline) {
+      throw ("timed out waiting for pid={0}" -f $TargetPid)
+    }
+    Start-Sleep -Milliseconds 250
+  }
+
+  Write-HelperLog ("observed pid={0} exit; opening installer" -f $TargetPid)
+  Start-Process -FilePath $InstallerPath -WorkingDirectory (Split-Path -Parent $InstallerPath)
+  Write-HelperLog "installer launch requested"
+} catch {
+  Write-HelperLog ("failed: {0}" -f $_.Exception.Message)
+  exit 1
+} finally {
+  Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+}
+`;
+}
+
+function windowsDeferredInstallerLauncherScript(): string {
+  return `param(
+  [Parameter(Mandatory = $true)]
+  [string]$PowerShellPath,
+
+  [Parameter(Mandatory = $true)]
+  [string]$HelperPath,
+
+  [Parameter(Mandatory = $true)]
+  [int]$TargetPid,
+
+  [Parameter(Mandatory = $true)]
+  [string]$InstallerPath,
+
+  [Parameter(Mandatory = $true)]
+  [int]$TimeoutMs,
+
+  [Parameter(Mandatory = $true)]
+  [string]$LogPath
+)
+
+$ErrorActionPreference = "Stop"
+
+function Quote-WindowsPowerShellArgument {
+  param([string]$Value)
+  return '"' + ($Value -replace '"', '\\"') + '"'
+}
+
+function Write-LauncherLog {
+  param([string]$Message)
+  try {
+    Add-Content -LiteralPath $LogPath -Value ("{0:o} {1}" -f (Get-Date), $Message)
+  } catch {
+  }
+}
+
+try {
+  Write-LauncherLog ("launching helper={0}" -f $HelperPath)
+  $arguments = @(
+    "-NoLogo",
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    (Quote-WindowsPowerShellArgument $HelperPath),
+    "-TargetPid",
+    $TargetPid.ToString(),
+    "-InstallerPath",
+    (Quote-WindowsPowerShellArgument $InstallerPath),
+    "-TimeoutMs",
+    $TimeoutMs.ToString(),
+    "-LogPath",
+    (Quote-WindowsPowerShellArgument $LogPath)
+  ) -join " "
+  Start-Process -FilePath $PowerShellPath -WindowStyle Hidden -ArgumentList $arguments
+  Write-LauncherLog "helper launch requested"
+} catch {
+  Write-LauncherLog ("launcher failed: {0}" -f $_.Exception.Message)
+  exit 1
+} finally {
+  Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+}
+`;
+}
+
+function windowsPowerShellCommand(env: NodeJS.ProcessEnv = process.env): string {
+  const systemRoot = env.SystemRoot ?? env.SYSTEMROOT ?? "C:\\Windows";
+  return join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+}
+
 async function launchMacInstallerAfterQuit(
   input: DeferredInstallerLaunchInput,
-  deps: { now: () => Date; spawnDetached: SpawnDetached },
+  deps: { now: () => Date; spawnDetached: SpawnInstallerHelper },
 ): Promise<string> {
   try {
     const helpersRoot = await ensureOwnedSubdir(input.root, HELPERS_DIR);
@@ -989,6 +1109,51 @@ async function launchMacInstallerAfterQuit(
       "/bin/sh",
       [scriptPath, input.appPid.toString(), input.installerPath, timeoutSeconds],
       { detached: true, stdio: "ignore", windowsHide: true },
+    );
+    child.unref();
+    return "";
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+async function launchWindowsInstallerAfterQuit(
+  input: DeferredInstallerLaunchInput,
+  deps: { now: () => Date; spawnDetached: SpawnInstallerHelper },
+): Promise<string> {
+  try {
+    const helpersRoot = await ensureOwnedSubdir(input.root, HELPERS_DIR);
+    const suffix = `${deps.now().getTime().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    const scriptPath = join(helpersRoot, `open-installer-after-quit-${suffix}.ps1`);
+    const launcherPath = join(helpersRoot, `open-installer-after-quit-${suffix}.launcher.ps1`);
+    const logPath = join(helpersRoot, `open-installer-after-quit-${suffix}.log`);
+    const powerShellPath = windowsPowerShellCommand();
+    await writeFile(scriptPath, windowsDeferredInstallerScript(), { encoding: "utf8" });
+    await writeFile(launcherPath, windowsDeferredInstallerLauncherScript(), { encoding: "utf8" });
+    const child = deps.spawnDetached(
+      powerShellPath,
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        launcherPath,
+        "-PowerShellPath",
+        powerShellPath,
+        "-HelperPath",
+        scriptPath,
+        "-TargetPid",
+        input.appPid.toString(),
+        "-InstallerPath",
+        input.installerPath,
+        "-TimeoutMs",
+        input.timeoutMs.toString(),
+        "-LogPath",
+        logPath,
+      ],
+      { stdio: "ignore", windowsHide: true },
     );
     child.unref();
     return "";
@@ -1133,8 +1298,12 @@ export function createDesktopUpdater(
   const now = deps.now ?? (() => new Date());
   const openPath = deps.openPath ?? (async () => "openPath is not available");
   const processPid = deps.processPid ?? process.pid;
-  const spawnDetached: SpawnDetached = deps.spawnDetached ?? ((command, args, options) => spawn(command, args, options));
-  const launchInstallerAfterQuit = deps.launchInstallerAfterQuit ?? ((input) => launchMacInstallerAfterQuit(input, { now, spawnDetached }));
+  const spawnDetached: SpawnInstallerHelper = deps.spawnDetached ?? ((command, args, options) => spawn(command, args, options));
+  const launchInstallerAfterQuit = deps.launchInstallerAfterQuit ?? ((input) => (
+    config.platform === "win32"
+      ? launchWindowsInstallerAfterQuit(input, { now, spawnDetached })
+      : launchMacInstallerAfterQuit(input, { now, spawnDetached })
+  ));
   const listeners = new Set<() => void>();
   let candidate: UpdateCandidate | null = null;
   let activeRelease: LoadedRelease | null = null;
@@ -1473,12 +1642,12 @@ export function createDesktopUpdater(
   }
 
   async function requestInstallerOpen(resolvedDownload: string, updateRoot: string): Promise<string> {
-    if (config.platform !== "darwin") return await openPath(resolvedDownload);
+    if (config.platform !== "darwin" && config.platform !== "win32") return await openPath(resolvedDownload);
     return await launchInstallerAfterQuit({
       appPid: processPid,
       installerPath: resolvedDownload,
       root: updateRoot,
-      timeoutMs: MAC_DEFERRED_INSTALLER_TIMEOUT_MS,
+      timeoutMs: config.platform === "win32" ? WINDOWS_DEFERRED_INSTALLER_TIMEOUT_MS : MAC_DEFERRED_INSTALLER_TIMEOUT_MS,
     });
   }
 

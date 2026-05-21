@@ -398,6 +398,92 @@ describe("desktop updater", () => {
     }
   });
 
+  it("writes and starts the Windows helper script that opens the installer after quit", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({ platform: "win" });
+    const openPath = vi.fn(async () => "openPath should not run for Windows deferred installer launch");
+    const unref = vi.fn();
+    const spawned: Array<{ args: string[]; command: string; options: unknown }> = [];
+    try {
+      const updater = createDesktopUpdater(
+        {
+          arch: "x64",
+          downloadRoot: root,
+          env: {
+            ...updaterEnv(fixture.metadataUrl, "win32"),
+            [DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]: "0",
+          },
+          source: SIDECAR_SOURCES.TOOLS_PACK,
+        },
+        {
+          openPath,
+          processPid: 4242,
+          spawnDetached: (command, args, options) => {
+            spawned.push({ args, command, options });
+            return { unref };
+          },
+        },
+      );
+
+      const checked = await updater.checkForUpdates();
+      const installed = await updater.installUpdate();
+
+      expect(installed.installResult?.path).toBe(checked.downloadPath);
+      expect(openPath).not.toHaveBeenCalled();
+      expect(spawned).toHaveLength(1);
+      expect(unref).toHaveBeenCalledTimes(1);
+      expect(spawned[0]?.command).toEqual(expect.stringContaining(join("System32", "WindowsPowerShell", "v1.0", "powershell.exe")));
+      expect(spawned[0]?.options).toEqual({ stdio: "ignore", windowsHide: true });
+      const args = spawned[0]?.args ?? [];
+      const launcherPath = args.at(args.indexOf("-File") + 1);
+      const scriptPath = args.at(args.indexOf("-HelperPath") + 1);
+      const logPath = args.at(args.indexOf("-LogPath") + 1);
+      expect(args).toEqual(expect.arrayContaining([
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-PowerShellPath",
+        spawned[0]?.command,
+        "-HelperPath",
+        "-TargetPid",
+        "4242",
+        "-InstallerPath",
+        checked.downloadPath,
+        "-TimeoutMs",
+        "600000",
+      ]));
+      expect(launcherPath).toEqual(expect.stringMatching(/open-installer-after-quit-.+\.launcher\.ps1$/));
+      expect(launcherPath).toEqual(expect.stringContaining(join(root, "helpers", "open-installer-after-quit-")));
+      expect(scriptPath).toEqual(expect.stringMatching(/open-installer-after-quit-.+\.ps1$/));
+      expect(scriptPath).toEqual(expect.stringContaining(join(root, "helpers", "open-installer-after-quit-")));
+      expect(logPath).toEqual(expect.stringMatching(/open-installer-after-quit-.+\.log$/));
+      const launcher = await readFile(launcherPath ?? "", "utf8");
+      expect(launcher).toContain("Start-Process -FilePath $PowerShellPath -WindowStyle Hidden");
+      expect(launcher).toContain("Quote-WindowsPowerShellArgument $InstallerPath");
+      expect(launcher).toContain("Remove-Item -LiteralPath $PSCommandPath");
+      const script = await readFile(scriptPath ?? "", "utf8");
+      expect(script).toContain("Get-Process -Id $TargetPid");
+      expect(script).toContain("Start-Process -FilePath $InstallerPath");
+      expect(script).toContain("Remove-Item -LiteralPath $PSCommandPath");
+
+      const restarted = createDesktopUpdater({
+        arch: "x64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl, "win32"),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      const restored = await restarted.status();
+      expect(restored.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(restored.error).toBeUndefined();
+      expect(restored.installResult?.path).toBe(checked.downloadPath);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("reuses an already verified matching download during auto-check", async () => {
     const root = makeRoot();
     const fixture = await createUpdaterFixture();
