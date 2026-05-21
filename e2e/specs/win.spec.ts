@@ -41,8 +41,11 @@ const updaterPopupExpression = `
   (() => {
     const popup = document.querySelector('[data-testid="updater-popup"]');
     const button = document.querySelector('[data-testid="updater-install-button"]');
+    const onboarding = document.querySelector('.onboarding-view');
     return {
+      href: location.href,
       installButtonVisible: button instanceof HTMLButtonElement && !button.disabled,
+      onboardingVisible: onboarding instanceof HTMLElement,
       text: popup?.textContent?.trim() ?? null,
       title: popup?.querySelector('h2')?.textContent?.trim() ?? null,
       visible: popup instanceof HTMLElement,
@@ -198,7 +201,9 @@ type UpdaterFixtureProcess = {
 };
 
 type UpdaterPopupEvalValue = {
+  href?: string;
   installButtonVisible: boolean;
+  onboardingVisible?: boolean;
   text: string | null;
   title: string | null;
   visible: boolean;
@@ -261,7 +266,7 @@ winDescribe('packaged windows runtime smoke', () => {
 
       updaterFixture = await startUpdaterFixtureProcess(updateScenario);
       applyPackagedUpdateEnv(process.env, updateScenario, updaterFixture.info.metadataUrl);
-      await seedPackagedOnboardingComplete();
+      await seedPackagedOnboardingComplete(install.installDir);
 
       let start = await measureSmokeStep(timings, 'start', async () => runToolsPackJson<WinStartResult>('start'));
       started = true;
@@ -763,13 +768,21 @@ async function readTiming(filePath: string): Promise<TimingResult> {
   return JSON.parse(await readFile(filePath, 'utf8')) as TimingResult;
 }
 
-async function seedPackagedOnboardingComplete(): Promise<void> {
-  const configPath = join(runtimeNamespaceRoot, 'data', 'app-config.json');
+async function seedPackagedOnboardingComplete(installDir: string): Promise<void> {
+  const configPath = join(await resolveExpectedDataRoot(installDir), 'app-config.json');
   await mkdir(dirname(configPath), { recursive: true });
   await writeFile(configPath, `${JSON.stringify({ onboardingCompleted: true }, null, 2)}\n`, 'utf8');
 }
 
 async function resolveExpectedUpdateRoot(installDir: string): Promise<string> {
+  return join(await resolveExpectedNamespaceRoot(installDir), 'updates');
+}
+
+async function resolveExpectedDataRoot(installDir: string): Promise<string> {
+  return join(await resolveExpectedNamespaceRoot(installDir), 'data');
+}
+
+async function resolveExpectedNamespaceRoot(installDir: string): Promise<string> {
   const installedConfig = JSON.parse(
     await readFile(join(installDir, 'resources', 'open-design-config.json'), 'utf8'),
   ) as InstalledPackagedConfig;
@@ -779,7 +792,7 @@ async function resolveExpectedUpdateRoot(installDir: string): Promise<string> {
       : null;
   const namespaceBaseRoot =
     configuredNamespaceBaseRoot ?? join(defaultWindowsAppDataRoot(await readInstalledAppName(installDir)), 'namespaces');
-  return join(resolve(namespaceBaseRoot), namespace, 'updates');
+  return join(resolve(namespaceBaseRoot), namespace);
 }
 
 async function readInstalledAppName(installDir: string): Promise<string> {
