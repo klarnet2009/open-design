@@ -71,7 +71,10 @@ type OrbitOutputLocale = 'en' | 'zh-CN' | 'zh-TW';
 function normalizeOrbitOutputLocale(locale?: string | null): OrbitOutputLocale {
   const normalized = locale?.trim().toLowerCase();
   if (!normalized) return 'en';
-  if (normalized === 'zh-tw' || normalized === 'zh-hk' || normalized === 'zh-mo' || normalized === 'zh-hant') {
+  const localeParts = normalized.split('-').filter(Boolean);
+  const hasTraditionalChineseScript = localeParts.includes('hant');
+  const hasTraditionalChineseRegion = localeParts.some((part) => part === 'tw' || part === 'hk' || part === 'mo');
+  if (normalized === 'zh-tw' || normalized === 'zh-hk' || normalized === 'zh-mo' || normalized === 'zh-hant' || hasTraditionalChineseScript || hasTraditionalChineseRegion) {
     return 'zh-TW';
   }
   if (normalized.startsWith('zh')) return 'zh-CN';

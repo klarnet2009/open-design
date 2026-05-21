@@ -136,6 +136,22 @@ describe('buildOrbitSystemPrompt', () => {
     expect(prompt).toContain('The final Orbit artifact itself must stay in Simplified Chinese.');
     expect(prompt).toContain('Generate today\'s Open Orbit GitHub briefing.');
   });
+
+  it('treats script-tagged Traditional Chinese locales as zh-TW', () => {
+    const template: OrbitTemplateSelection = {
+      id: 'orbit-github',
+      name: 'orbit-github',
+      examplePrompt: 'Generate today\'s Open Orbit GitHub briefing.',
+      dir: path.join('/repo', 'skills', 'orbit-github'),
+      body: 'Mirror the shipped `example.html` before writing output.',
+      designSystemRequired: false,
+    };
+
+    const prompt = buildOrbitSystemPrompt(new Date('2026-05-06T15:32:52.361Z'), template, 'zh-Hant-TW');
+
+    expect(prompt).toContain('App language: Traditional Chinese (zh-TW).');
+    expect(prompt).toContain('The final Orbit artifact itself must stay in Traditional Chinese.');
+  });
 });
 
 describe('OrbitService', () => {
