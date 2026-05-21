@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { OrbitRunSummary, OrbitStatusResponse } from '@open-design/contracts/api/orbit';
 
 import type { OrbitConfigPrefs } from './app-config.js';
+import { skillCwdAliasSegment } from './cwd-aliases.js';
 
 export interface OrbitConnectorRunResult {
   connectorId: string;
@@ -336,9 +337,9 @@ export function buildOrbitSystemPrompt(now = new Date(), template?: OrbitTemplat
       'Selected example template:',
       `- Skill id: ${template.id}`,
       `- Skill name: ${template.name}`,
-      `- Staged root: .od-skills/${path.basename(template.dir)}/`,
+      `- Staged root: .od-skills/${skillCwdAliasSegment(template.dir)}/`,
       '',
-      `Before writing the artifact, read ".od-skills/${path.basename(template.dir)}/SKILL.md" and, if present, ".od-skills/${path.basename(template.dir)}/example.html". Follow that staged template's structure, layout, tokens, domain rules, and visual language as the source of truth. The staged template is for visual/domain guidance; still use the live-artifact workflow to register the final artifact.`,
+      `Before writing the artifact, read ".od-skills/${skillCwdAliasSegment(template.dir)}/SKILL.md" and, if present, ".od-skills/${skillCwdAliasSegment(template.dir)}/example.html". Follow that staged template's structure, layout, tokens, domain rules, and visual language as the source of truth. The staged template is for visual/domain guidance; still use the live-artifact workflow to register the final artifact.`,
       '',
       'Selected template example prompt:',
       '',

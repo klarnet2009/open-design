@@ -12,6 +12,7 @@ import {
   type OrbitRunHandler,
   type OrbitTemplateSelection,
 } from '../src/orbit.js';
+import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 
 function formatExpectedLocalOrbitPromptTimestamp(date: Date): string {
   const yyyy = date.getFullYear();
@@ -64,11 +65,12 @@ describe('buildOrbitSystemPrompt', () => {
     };
 
     const prompt = buildOrbitSystemPrompt(new Date('2026-05-06T15:32:52.361Z'), template);
+    const stagedAlias = skillCwdAliasSegment(template.dir);
 
     expect(prompt).toContain('Skill id: orbit-general');
-    expect(prompt).toContain('Staged root: .od-skills/orbit-general/');
-    expect(prompt).toContain('read ".od-skills/orbit-general/SKILL.md"');
-    expect(prompt).toContain('".od-skills/orbit-general/example.html"');
+    expect(prompt).toContain(`Staged root: .od-skills/${stagedAlias}/`);
+    expect(prompt).toContain(`read ".od-skills/${stagedAlias}/SKILL.md"`);
+    expect(prompt).toContain(`".od-skills/${stagedAlias}/example.html"`);
     expect(prompt).toContain('visual/domain guidance');
     expect(prompt).not.toContain('Selected template skill instructions:');
     expect(prompt).toContain('Selected template example prompt:');

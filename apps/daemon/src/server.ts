@@ -210,7 +210,7 @@ import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
-import { stageActiveSkill } from './cwd-aliases.js';
+import { skillCwdAliasSegment, stageActiveSkill } from './cwd-aliases.js';
 import { buildDesktopPdfExportInput } from './pdf-export.js';
 import { generateMedia } from './media.js';
 import { listElevenLabsVoiceOptions } from './elevenlabs-voices.js';
@@ -8382,6 +8382,7 @@ export async function startServer({
           skillCraftRequires = skill.craftRequires;
       }
     }
+    let composedSkillBlocks = '';
     if (adHocSkillIds.length > 0) {
       const allSkills = await loadAllSkills();
       const seen = new Set(
@@ -8413,7 +8414,8 @@ export async function startServer({
         );
       }
       if (blocks.length > 0) {
-        skillBody = baseBody + blocks.join('');
+        composedSkillBlocks = blocks.join('');
+        skillBody = baseBody + composedSkillBlocks;
         if (!skillName) {
           skillName = adHocSkillIds.length === 1
             ? findSkillById(allSkills, adHocSkillIds[0])?.name ?? null
@@ -8440,7 +8442,7 @@ export async function startServer({
             const { loadPluginLocalSkill } = await import('./plugins/local-skill.js');
             const local = await loadPluginLocalSkill(plugin);
             if (local) {
-              skillBody = local.body;
+              skillBody = local.body + composedSkillBlocks;
               skillName = local.name;
               activeSkillDir = local.dir;
               registerSkillDir(local.dir);
@@ -9118,7 +9120,7 @@ export async function startServer({
       for (const skillDir of activeSkillDirs) {
         const result = await stageActiveSkill(
           cwd,
-          path.basename(skillDir),
+          skillCwdAliasSegment(skillDir),
           skillDir,
           (msg) => console.warn(msg),
         );
@@ -10256,7 +10258,7 @@ export async function startServer({
       const cwd = await ensureProject(PROJECTS_DIR, projectId);
       const result = await stageActiveSkill(
         cwd,
-        path.basename(template.dir),
+        skillCwdAliasSegment(template.dir),
         template.dir,
         (msg) => console.warn(msg),
       );
