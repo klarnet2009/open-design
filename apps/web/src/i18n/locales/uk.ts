@@ -771,6 +771,8 @@ export const uk: Dict = {
   'chat.openFile': 'Відкрити {name}',
   'chat.copyPrompt': 'Копіювати запит',
   'chat.copyDone': 'Скопійовано!',
+  'chat.editAndResend': 'Редагувати й надіслати знову',
+  'chat.saveAndResend': 'Зберегти й надіслати знову',
   'chat.composerPlaceholder':
     'Опишіть дизайн, який ви хочете — вставте або перенесіть зображення, або скористайтеся @ для посилання на файл чи навичку…',
   'chat.composerHint':

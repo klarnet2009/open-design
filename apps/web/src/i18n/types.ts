@@ -1511,6 +1511,8 @@ export interface Dict {
   'chat.openFile': string;
   'chat.copyPrompt': string;
   'chat.copyDone': string;
+  'chat.editAndResend': string;
+  'chat.saveAndResend': string;
   'chat.composerPlaceholder': string;
   'chat.composerHint': string;
   'chat.cliSettingsTitle': string;

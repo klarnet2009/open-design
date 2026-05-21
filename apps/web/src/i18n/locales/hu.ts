@@ -749,6 +749,8 @@ export const hu: Dict = {
   'chat.openFile': '{name} megnyitása',
   'chat.copyPrompt': 'Prompt másolása',
   'chat.copyDone': 'Másolva!',
+  'chat.editAndResend': 'Szerkesztés és újraküldés',
+  'chat.saveAndResend': 'Mentés és újraküldés',
   'chat.composerPlaceholder':
     'Írd le a kívánt designt — illessz be vagy húzz képeket, vagy @-tel hivatkozz fájlra vagy skillre…',
   'chat.composerHint':

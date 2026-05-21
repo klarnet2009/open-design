@@ -637,6 +637,8 @@ export const de: Dict = {
   'chat.openFile': '{name} öffnen',
   'chat.copyPrompt': 'Prompt kopieren',
   'chat.copyDone': 'Kopiert!',
+  'chat.editAndResend': 'Bearbeiten und erneut senden',
+  'chat.saveAndResend': 'Speichern und erneut senden',
   'chat.composerPlaceholder':
     'Beschreiben Sie das gewünschte Design — Bilder einfügen/ablegen oder mit @ eine Datei oder einen Skill referenzieren…',
   'chat.composerHint':

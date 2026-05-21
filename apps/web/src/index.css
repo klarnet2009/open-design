@@ -2046,7 +2046,7 @@ a.avatar-item:visited {
   max-width: 100%;
 }
 .msg.user .user-text-wrap .user-text {
-  padding-inline-end: 28px;
+  padding-inline-end: 50px;
 }
 .msg.user .user-status-wrap {
   display: flex;
@@ -2092,10 +2092,10 @@ a.avatar-item:visited {
   color: var(--text-muted);
 }
 
-.msg.user .user-copy-btn {
+.msg.user .user-copy-btn,
+.msg.user .user-edit-btn {
   position: absolute;
   inset-block-start: 6px;
-  inset-inline-end: 6px;
   padding: 4px;
   border: none;
   background: none;
@@ -2106,23 +2106,68 @@ a.avatar-item:visited {
   cursor: pointer;
   z-index: 1;
 }
-.msg.user .user-copy-btn:hover {
+.msg.user .user-copy-btn {
+  inset-inline-end: 6px;
+}
+.msg.user .user-edit-btn {
+  inset-inline-end: 28px;
+}
+.msg.user .user-copy-btn:hover,
+.msg.user .user-edit-btn:hover {
   color: #fff;
   background: rgba(255, 255, 255, 0.12);
 }
 .msg.user .user-text-wrap:hover .user-copy-btn,
+.msg.user .user-text-wrap:hover .user-edit-btn,
 .msg.user .user-text-wrap:focus-within .user-copy-btn,
+.msg.user .user-text-wrap:focus-within .user-edit-btn,
 .msg.user .user-copy-btn:focus-visible {
   opacity: 1;
 }
-.msg.user .user-copy-btn:focus-visible {
+.msg.user .user-edit-btn:focus-visible {
+  opacity: 1;
+}
+.msg.user .user-copy-btn:focus-visible,
+.msg.user .user-edit-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 @media (hover: none) {
-  .msg.user .user-copy-btn {
+  .msg.user .user-copy-btn,
+  .msg.user .user-edit-btn {
     opacity: 1;
   }
+}
+.user-edit-wrap {
+  display: grid;
+  gap: 8px;
+  width: min(520px, 100%);
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px 14px 4px 14px;
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+}
+.user-edit-input {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.45;
+}
+.user-edit-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.user-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 .msg.assistant .prose { margin-top: 4px; }
 .msg .artifact-badge {
@@ -26419,7 +26464,7 @@ body.desktop-pet-shell .pet-task-item {
   font-weight: 500;
 }
 .app .msg.user .user-text {
-  padding: 8px 34px 8px 11px;
+  padding: 8px 56px 8px 11px;
   border: 1px solid color-mix(in srgb, var(--selected) 88%, #000);
   border-radius: 14px 14px 4px 14px;
   background: var(--selected);
@@ -26428,10 +26473,12 @@ body.desktop-pet-shell .pet-task-item {
   font-size: 13.5px;
   box-shadow: var(--shadow-xs);
 }
-.app .msg.user .user-copy-btn {
+.app .msg.user .user-copy-btn,
+.app .msg.user .user-edit-btn {
   color: rgba(255, 255, 255, 0.85);
 }
-.app .msg.user .user-copy-btn:hover {
+.app .msg.user .user-copy-btn:hover,
+.app .msg.user .user-edit-btn:hover {
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
 }

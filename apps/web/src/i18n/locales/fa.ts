@@ -771,6 +771,8 @@ export const fa: Dict = {
   'chat.openFile': 'باز کردن {name}',
   'chat.copyPrompt': 'کپی پرامپت',
   'chat.copyDone': 'کپی شد!',
+  'chat.editAndResend': 'ویرایش و ارسال دوباره',
+  'chat.saveAndResend': 'ذخیره و ارسال دوباره',
   'chat.composerPlaceholder':
     'طرح مورد نظر خود را توصیف کنید — تصاویر را بچسبانید یا رها کنید، یا @ برای مرجع فایل یا مهارت…',
   'chat.composerHint':

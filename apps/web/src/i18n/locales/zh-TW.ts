@@ -826,6 +826,8 @@ export const zhTW: Dict = {
   'chat.openFile': '開啟 {name}',
   'chat.copyPrompt': '複製提示詞',
   'chat.copyDone': '已複製！',
+  'chat.editAndResend': '編輯並重發',
+  'chat.saveAndResend': '儲存並重發',
   'chat.composerPlaceholder': '描述你想要的設計 — 貼上圖片、@ 檔案或技能、/ 叫出指令…',
   'chat.composerHint': '⌘/Ctrl + Enter 傳送 · 可貼上圖片 · @ 引用檔案或技能 · / 叫出指令',
   'chat.cliSettingsTitle': 'CLI 與模型設定',

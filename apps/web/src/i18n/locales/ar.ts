@@ -749,6 +749,8 @@ export const ar: Dict = {
   'chat.openFile': 'فتح {name}',
   'chat.copyPrompt': 'نسخ الأمر',
   'chat.copyDone': 'تم النسخ!',
+  'chat.editAndResend': 'تعديل وإعادة الإرسال',
+  'chat.saveAndResend': 'حفظ وإعادة الإرسال',
   'chat.composerPlaceholder':
     'صف التصميم الذي تريده - الصق أو اسحب الصور، أو @ لملف أو مهارة...',
   'chat.composerHint':

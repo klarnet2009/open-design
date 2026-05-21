@@ -149,7 +149,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'pending-prompt', 'project', 'conversation', 'message', 'path', 'as',
   'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps',
 ]);
-const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
+const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow', 'include-target']);
 // `od automation …` mirrors the Automations tab. Same surface, same
 // /api/routines store. The CLI form is the embeddability contract:
 // external agents (hermes-agent, openclaw, etc.) can drive Open Design
@@ -4094,6 +4094,8 @@ async function runConversation(args) {
     console.log(`Usage:
   od conversation list <projectId>           List conversations in a project.
   od conversation info <conversationId>      Print one conversation.
+  od conversation truncate <projectId> <conversationId> <messageId>
+                                             Delete messages after a message.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
@@ -4127,6 +4129,27 @@ Common options:
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      return;
+    }
+    case 'truncate': {
+      const positional = rest.filter((a) => !a.startsWith('-'));
+      const [projectId, conversationId, messageId] = positional;
+      if (!projectId || !conversationId || !messageId) {
+        console.error('Usage: od conversation truncate <projectId> <conversationId> <messageId> [--include-target]');
+        process.exit(2);
+      }
+      const resp = await fetch(
+        `${base}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/truncate`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ includeTarget: flags['include-target'] === true }),
+        },
+      );
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[conversation] deleted ${data.deletedCount ?? 0} message(s)`);
       return;
     }
     default:

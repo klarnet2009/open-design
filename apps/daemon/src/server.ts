@@ -4253,6 +4253,7 @@ export async function startServer({
     deleteConversation,
     listMessages,
     upsertMessage,
+    truncateConversationMessages,
     listPreviewComments,
     upsertPreviewComment,
     updatePreviewCommentStatus,

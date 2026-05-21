@@ -246,6 +246,7 @@ interface Props {
     relativePath: string,
     action: PluginFolderAgentAction,
   ) => Promise<void> | void;
+  onEditUserMessage?: (message: ChatMessage, nextPrompt: string) => Promise<void> | void;
   initialDraft?: string;
   // Question-form submissions become a normal user message; the parent
   // routes that text through onSend (no attachments).
@@ -320,6 +321,7 @@ export function ChatPane({
   onStop,
   onRequestOpenFile,
   onRequestPluginFolderAgentAction,
+  onEditUserMessage,
   initialDraft,
   onSubmitForm,
   onContinueRemainingTasks,
@@ -856,6 +858,7 @@ export function ChatPane({
                         projectId={projectId}
                         projectFileNames={projectFileNames}
                         onRequestOpenFile={onRequestOpenFile}
+                        onEditUserMessage={onEditUserMessage}
                         t={t}
                         activePluginSnapshot={
                           m.id === firstUserMessageId
@@ -1229,6 +1232,7 @@ function UserMessage({
   projectId,
   projectFileNames,
   onRequestOpenFile,
+  onEditUserMessage,
   t,
   activePluginSnapshot,
 }: {
@@ -1236,12 +1240,15 @@ function UserMessage({
   projectId: string | null;
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
+  onEditUserMessage?: (message: ChatMessage, nextPrompt: string) => Promise<void> | void;
   t: TranslateFn;
   activePluginSnapshot?: AppliedPluginSnapshot | null;
 }) {
   const attachments = message.attachments ?? [];
   const commentAttachments = message.commentAttachments ?? [];
   const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(message.content);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
@@ -1249,6 +1256,10 @@ function UserMessage({
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!editing) setDraft(message.content);
+  }, [editing, message.content]);
 
   async function handleCopy() {
     if (!message.content) return;
@@ -1260,6 +1271,21 @@ function UserMessage({
       setCopied(false);
       copyTimerRef.current = undefined;
     }, 2000);
+  }
+
+  function cancelEdit() {
+    setDraft(message.content);
+    setEditing(false);
+  }
+
+  function submitEdit() {
+    const next = draft.trim();
+    if (!next || next === message.content.trim()) {
+      cancelEdit();
+      return;
+    }
+    void onEditUserMessage?.(message, next);
+    setEditing(false);
   }
 
   const isDesignSystemWorkspaceRequest = isDesignSystemWorkspacePrompt(message.content);
@@ -1315,7 +1341,39 @@ function UserMessage({
           ))}
         </div>
       ) : null}
-      {message.content && isDesignSystemWorkspaceRequest ? (
+      {editing ? (
+        <div className="user-edit-wrap">
+          <textarea
+            className="user-edit-input"
+            value={draft}
+            autoFocus
+            rows={Math.min(8, Math.max(2, draft.split('\n').length))}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                event.preventDefault();
+                submitEdit();
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelEdit();
+              }
+            }}
+          />
+          <div className="user-edit-actions">
+            <button type="button" className="btn-sm" onClick={cancelEdit}>
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn-sm btn-primary"
+              disabled={!draft.trim()}
+              onClick={submitEdit}
+            >
+              {t('chat.saveAndResend')}
+            </button>
+          </div>
+        </div>
+      ) : message.content && isDesignSystemWorkspaceRequest ? (
         <div className="user-text-wrap user-status-wrap">
           <div className="user-status-card design-system-generation-status">
             <span className="user-status-card__icon">
@@ -1339,6 +1397,17 @@ function UserMessage({
           >
             <Icon name={copied ? 'check' : 'copy'} size={12} />
           </button>
+          {onEditUserMessage ? (
+            <button
+              type="button"
+              className="ghost user-edit-btn"
+              onClick={() => setEditing(true)}
+              aria-label={t('chat.editAndResend')}
+              title={t('chat.editAndResend')}
+            >
+              <Icon name="edit" size={12} />
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

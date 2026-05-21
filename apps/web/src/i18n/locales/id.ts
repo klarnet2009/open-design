@@ -861,6 +861,8 @@ export const id: Dict = {
   'chat.openFile': 'Buka {name}',
   'chat.copyPrompt': 'Salin prompt',
   'chat.copyDone': 'Disalin!',
+  'chat.editAndResend': 'Edit dan kirim ulang',
+  'chat.saveAndResend': 'Simpan dan kirim ulang',
   'chat.composerPlaceholder':
     'Jelaskan desain yang kamu inginkan — tempel atau jatuhkan gambar, atau @ file atau skill…',
   'chat.composerHint':

@@ -770,6 +770,8 @@ export const ptBR: Dict = {
   'chat.openFile': 'Abrir {name}',
   'chat.copyPrompt': 'Copiar prompt',
   'chat.copyDone': 'Copiado!',
+  'chat.editAndResend': 'Editar e reenviar',
+  'chat.saveAndResend': 'Salvar e reenviar',
   'chat.composerPlaceholder':
     'Descreva o design que você quer — cole ou arraste imagens, ou use @ para referenciar um arquivo ou skill…',
   'chat.composerHint':

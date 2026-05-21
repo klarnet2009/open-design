@@ -703,6 +703,8 @@ export const th: Dict = {
   'chat.openFile': 'เปิด {name}',
   'chat.copyPrompt': 'คัดลอกพรอมต์',
   'chat.copyDone': 'คัดลอกแล้ว!',
+  'chat.editAndResend': 'แก้ไขแล้วส่งอีกครั้ง',
+  'chat.saveAndResend': 'บันทึกแล้วส่งอีกครั้ง',
   'chat.composerPlaceholder': 'บรรยายรายละเอียด... ลากรูปมาวางได้ หรือใช้ @ อ้างอิงไฟล์',
   'chat.composerHint': '⌘/Ctrl + Enter เพื่อส่ง · วางภาพ · @ เพื่ออ้างอิง',
   'chat.cliSettingsTitle': 'ตั้งค่าโมเดลและ CLI',

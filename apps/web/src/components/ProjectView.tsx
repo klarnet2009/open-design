@@ -85,6 +85,7 @@ import {
   saveMessage,
   saveTabs,
   synthesizeHandoff,
+  truncateConversationMessages,
   type SaveMessageOptions,
 } from '../state/projects';
 import type { AppliedPluginSnapshot } from '@open-design/contracts';
@@ -2023,7 +2024,9 @@ export function ProjectView({
       attachments: ChatAttachment[],
       commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
       meta?: ChatSendMeta,
+      baseMessages?: ChatMessage[],
     ) => {
+      const historyBase = baseMessages ?? messages;
       if (!activeConversationId) return;
       if (messagesConversationIdRef.current !== activeConversationId) return;
       if (currentConversationBusy) return;
@@ -2099,7 +2102,7 @@ export function ProjectView({
         );
       };
       activeCompletionNotificationRunsRef.current.add(assistantId);
-      const nextHistory = [...messages, userMsg];
+      const nextHistory = [...historyBase, userMsg];
       setMessages([...nextHistory, assistantMsg]);
       markStreamingConversation(runConversationId);
       updateConversationLatestRun(config.mode === 'daemon' ? 'running' : 'queued');
@@ -2121,7 +2124,7 @@ export function ProjectView({
       // If this is the first turn, derive a working title from the prompt
       // so the conversation is identifiable in the dropdown without a
       // round-trip through the agent.
-      if (messages.length === 0) {
+      if (historyBase.length === 0) {
         const title = isDesignSystemWorkspacePrompt(prompt)
           ? DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE
           : prompt.slice(0, 60).trim();
@@ -2649,6 +2652,42 @@ export function ProjectView({
       void handleSend(prompt, [], []);
     },
     [currentConversationActionDisabled, handleSend],
+  );
+
+  const handleEditAndResendUserMessage = useCallback(
+    async (message: ChatMessage, nextPrompt: string) => {
+      if (!activeConversationId || currentConversationActionDisabled) return;
+      if (messagesConversationIdRef.current !== activeConversationId) return;
+      const trimmed = nextPrompt.trim();
+      if (!trimmed) return;
+      const truncated = await truncateConversationMessages(
+        project.id,
+        activeConversationId,
+        message.id,
+        { includeTarget: true },
+      );
+      if (!truncated) {
+        setError('Could not edit and resend this message.');
+        return;
+      }
+      setMessages(truncated);
+      setError(null);
+      setArtifact(null);
+      savedArtifactRef.current = null;
+      void handleSend(
+        trimmed,
+        message.attachments ?? [],
+        message.commentAttachments ?? [],
+        undefined,
+        truncated,
+      );
+    },
+    [
+      activeConversationId,
+      currentConversationActionDisabled,
+      handleSend,
+      project.id,
+    ],
   );
 
   const handlePluginFolderAgentAction = useCallback(
@@ -3890,6 +3929,7 @@ export function ProjectView({
               onStop={handleStop}
               onRequestOpenFile={requestOpenFile}
               onRequestPluginFolderAgentAction={handlePluginFolderAgentAction}
+              onEditUserMessage={handleEditAndResendUserMessage}
               initialDraft={chatInitialDraft}
               onSubmitForm={(text) => {
                 if (currentConversationActionDisabled) return;

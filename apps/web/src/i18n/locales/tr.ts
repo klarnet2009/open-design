@@ -738,6 +738,8 @@ export const tr: Dict = {
   'chat.openFile': '{name}’ı aç',
   'chat.copyPrompt': 'Promptu kopyala',
   'chat.copyDone': 'Kopyalandı!',
+  'chat.editAndResend': 'Düzenle ve yeniden gönder',
+  'chat.saveAndResend': 'Kaydet ve yeniden gönder',
   'chat.composerPlaceholder':
     'İstediğiniz tasarımı açıklayın — görsel yapıştırın veya sürükleyin, veya @ ile bir dosya ya da skill seçin…',
   'chat.composerHint':
