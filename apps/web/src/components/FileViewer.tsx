@@ -4777,6 +4777,11 @@ function HtmlViewer({
       setManualEditHistory((current) => [entry, ...current]);
       setManualEditUndone([]);
       setManualEditDraft((current) => ({ ...current, fullSource: result.source }));
+      if (patch.kind === 'set-text') {
+        setSelectedManualEditTarget((current) => current?.id === patch.id
+          ? { ...current, text: patch.value, fields: { ...current.fields, text: patch.value } }
+          : current);
+      }
       if (patch.kind === 'set-style') {
         reconcileManualEditStyleSave(patch.id, patch.styles, result.source);
       }

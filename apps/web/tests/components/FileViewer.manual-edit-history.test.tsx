@@ -29,8 +29,8 @@ function openManualTools() {
 }
 
 function openAgentTools() {
-  if (!screen.queryByRole('menu', { name: 'Ask agent tools' })) {
-    fireEvent.click(screen.getByRole('button', { name: 'Ask agent' }));
+  if (!screen.queryByRole('menu', { name: 'More annotation tools' })) {
+    fireEvent.click(screen.getByRole('button', { name: 'More annotation tools' }));
   }
 }
 
