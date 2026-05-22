@@ -1492,9 +1492,12 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     var clamped = Math.max(0, Math.min(list.length - 1, target));
     var diff = clamped - before;
     if (!diff) { report(); return true; }
-    var key = diff > 0 ? 'ArrowRight' : 'ArrowLeft';
-    var n = Math.abs(diff);
-    for (var k = 0; k < n; k++) dispatchKey(key);
+    var key = null;
+    if (Math.abs(diff) === 1) key = diff > 0 ? 'ArrowRight' : 'ArrowLeft';
+    else if (clamped === 0) key = 'Home';
+    else if (clamped === list.length - 1) key = 'End';
+    if (!key) return false;
+    dispatchKey(key);
     if (activeIndex(list) === clamped) {
       setTimeout(report, 280);
       return true;
