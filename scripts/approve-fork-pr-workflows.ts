@@ -149,7 +149,6 @@ export function hasPullApprovalStateDrift(initialPull: PullRequest, latestPull: 
     latestPull.state !== "open" ||
     Boolean(latestPull.draft) ||
     latestPull.head.sha !== initialPull.head.sha ||
-    latestPull.base.sha !== initialPull.base.sha ||
     latestPull.base.ref !== initialPull.base.ref ||
     latestPull.head.repo?.full_name !== initialPull.head.repo?.full_name
   );

@@ -277,7 +277,7 @@ test("runTargetsPullRequest approves only the run that GitHub associates to the 
   assert.equal(runTargetsPullRequest(otherPrRun, pull, [pull, otherPull]), false);
 });
 
-test("hasPullApprovalStateDrift stays false only while the PR remains open on the same head/base tuple", () => {
+test("hasPullApprovalStateDrift ignores base tip churn but still rejects base retargeting and head drift", () => {
   const pull = {
     number: 2683,
     state: "open",
@@ -294,6 +294,13 @@ test("hasPullApprovalStateDrift stays false only while the PR remains open on th
   };
 
   assert.equal(hasPullApprovalStateDrift(pull, pull), false);
+  assert.equal(
+    hasPullApprovalStateDrift(pull, {
+      ...pull,
+      base: { ...pull.base, sha: "08a88a65482123629ebda5a090c71533bd6b8a88" },
+    }),
+    false,
+  );
   assert.equal(hasPullApprovalStateDrift(pull, { ...pull, draft: true }), true);
   assert.equal(hasPullApprovalStateDrift(pull, { ...pull, state: "closed" }), true);
   assert.equal(
