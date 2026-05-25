@@ -36,6 +36,12 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
   // Claude Code still repeats them in the final assistant wrapper, often with
   // empty `{}` inputs, so we suppress that duplicate emission.
   const streamedToolUseIds = new Set<string>();
+  // Best-effort partial inputs recovered from streamed `input_json_delta`
+  // bytes that did NOT parse cleanly at content_block_stop (e.g. Windows
+  // stdout dropped a fragment mid-tool-call — see #1914). Keyed by tool_use
+  // id, consumed by the assistant-wrapper merge below so we surface
+  // `file_path` instead of an empty `{}` that renders as "(unnamed)".
+  const recoveredToolUseInputs = new Map<string, Record<string, unknown>>();
   // Most recent assistant message id so content_block_* events without an id
   // can be attributed correctly.
   let currentMessageId: string | null = null;
@@ -131,11 +137,24 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
             streamedToolUseIds.delete(block.id);
             continue;
           }
+          let input: unknown = block.input ?? null;
+          if (typeof block.id === 'string') {
+            const recovered = recoveredToolUseInputs.get(block.id);
+            if (recovered) {
+              recoveredToolUseInputs.delete(block.id);
+              // Wrapper values are authoritative when present; recovered
+              // fragments backfill missing keys (typically `file_path`)
+              // so the UI no longer renders the card as "(unnamed)".
+              input = isRecord(input)
+                ? { ...recovered, ...input }
+                : recovered;
+            }
+          }
           onEvent({
             type: 'tool_use',
             id: block.id,
             name: block.name,
-            input: block.input ?? null,
+            input,
           });
         } else if (
           !alreadyStreamed &&
@@ -246,8 +265,15 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
           });
           streamedToolUseIds.add(state.id);
         } catch {
-          // Fall through to the final assistant wrapper's input if the
-          // streamed JSON is malformed or incomplete.
+          // Streamed JSON did not parse cleanly — most often because a stdout
+          // fragment was dropped mid-tool-call on Windows (#1914). Try to
+          // recover whatever values made it through and stash them; the
+          // assistant wrapper merge above will surface them as the tool
+          // input so the UI shows real file paths instead of "(unnamed)".
+          const recovered = bestEffortParsePartialJson(state.input);
+          if (recovered) {
+            recoveredToolUseInputs.set(state.id, recovered);
+          }
         }
       }
       blocks.delete(key);
@@ -266,4 +292,107 @@ function stringifyToolResult(content: unknown): string {
       .join('\n');
   }
   return JSON.stringify(content);
+}
+
+/**
+ * Recovers as much of a streamed tool input object as possible from a JSON
+ * fragment that failed to parse. Truncation typically lands inside a string
+ * value or at a dangling separator: we close any open string, balance the
+ * bracket stack, and progressively strip dangling key/colon/comma tails
+ * until a prefix parses. Returns `null` if nothing useful can be salvaged.
+ *
+ * Scoped to top-level objects because every Claude tool input is an object;
+ * arrays/scalars never appear as the outermost shape.
+ */
+export function bestEffortParsePartialJson(input: string): Record<string, unknown> | null {
+  const trimmed = input.trim();
+  if (!trimmed || !trimmed.startsWith('{')) return null;
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    // Fall through to repair.
+  }
+
+  let body = trimmed;
+  for (let attempt = 0; attempt < 64; attempt++) {
+    const { stack, inString, escape } = scanJsonState(body);
+
+    let working = body;
+    if (escape) working = working.slice(0, -1);
+    if (inString) working += '"';
+
+    // Strip dangling separators / orphan key fragments so the closers attach
+    // to a balanced position. Repeat until stable — stripping `"key":` can
+    // expose a trailing `,` that needs its own pass.
+    let prev: string;
+    do {
+      prev = working;
+      working = working.replace(/\s+$/, '');
+      working = working.replace(/,$/, '');
+      working = working.replace(/("(?:[^"\\]|\\.)*"\s*:\s*)$/, '');
+      working = working.replace(/,\s*"(?:[^"\\]|\\.)*"\s*$/, '');
+    } while (working !== prev);
+
+    let closers = '';
+    for (let i = stack.length - 1; i >= 0; i--) closers += stack[i] === '{' ? '}' : ']';
+
+    try {
+      const parsed = JSON.parse(working + closers);
+      return isRecord(parsed) ? parsed : null;
+    } catch {
+      const next = stripTrailingPartialEntry(body);
+      if (next === body || next.length === 0) return null;
+      body = next;
+    }
+  }
+  return null;
+}
+
+function scanJsonState(s: string): { stack: Array<'{' | '['>; inString: boolean; escape: boolean } {
+  const stack: Array<'{' | '['> = [];
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!;
+    if (escape) { escape = false; continue; }
+    if (inString) {
+      if (ch === '\\') escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === '{') stack.push('{');
+    else if (ch === '[') stack.push('[');
+    else if (ch === '}' || ch === ']') stack.pop();
+  }
+  return { stack, inString, escape };
+}
+
+function stripTrailingPartialEntry(body: string): string {
+  // Walk the body, tracking per-container "last safe cut" — either the
+  // position just after the container's opening bracket or the position of
+  // its most recent top-level comma. When we hit a parse failure, cutting
+  // back to the innermost container's last safe point drops the half-written
+  // entry without disturbing the rest of the object.
+  let inString = false;
+  let escape = false;
+  const stack: Array<{ lastSep: number }> = [];
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i]!;
+    if (escape) { escape = false; continue; }
+    if (inString) {
+      if (ch === '\\') escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === '{' || ch === '[') stack.push({ lastSep: i + 1 });
+    else if (ch === '}' || ch === ']') stack.pop();
+    else if (ch === ',' && stack.length > 0) stack[stack.length - 1]!.lastSep = i;
+  }
+  if (stack.length === 0) return '';
+  const top = stack[stack.length - 1]!;
+  return body.slice(0, top.lastSep).replace(/[,\s]+$/, '');
 }
