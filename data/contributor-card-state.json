@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-25T09:27:18.554Z",
+  "generatedAt": "2026-05-25T09:33:50.105Z",
   "contributors": {
     "1115052994": {
       "lastAnnouncedTier": "spark",
@@ -1709,6 +1709,13 @@
       "lastCheckedAt": "2026-05-25T08:04:30.858Z",
       "scoreVersion": "weighted-v1",
       "lastAnnouncedAt": "2026-05-25T08:04:30.858Z"
+    },
+    "apehc": {
+      "lastAnnouncedTier": "signal",
+      "lastKnownScore": 31,
+      "lastCheckedAt": "2026-05-25T09:33:50.105Z",
+      "scoreVersion": "weighted-v1",
+      "lastAnnouncedAt": "2026-05-25T09:33:50.105Z"
     }
   }
 }
