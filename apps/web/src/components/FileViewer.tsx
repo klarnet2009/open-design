@@ -6272,9 +6272,9 @@ function HtmlViewer({
                   type="button"
                   className={`viewer-action viewer-action-icon viewer-comment-toggle${boardMode && !commentCreateMode && boardTool === 'inspect' ? ' active' : ''}`}
                   data-testid="board-mode-toggle"
-                  data-tooltip="Inspect style"
-                  title="Inspect style"
-                  aria-label="Inspect style"
+                  data-tooltip={t('fileViewer.comment')}
+                  title={t('fileViewer.comment')}
+                  aria-label={t('fileViewer.comment')}
                   aria-pressed={boardMode && !commentCreateMode && boardTool === 'inspect'}
                   onClick={activateCommentTool}
                 >
@@ -6470,13 +6470,13 @@ function HtmlViewer({
                 type="button"
                 className={`viewer-action viewer-comment-toggle${boardMode && !commentCreateMode && boardTool === 'inspect' ? ' active' : ''}`}
                 data-testid="board-mode-toggle"
-                title="Inspect style"
-                aria-label="Inspect style"
+                title={t('fileViewer.comment')}
+                aria-label={t('fileViewer.comment')}
                 aria-pressed={boardMode && !commentCreateMode && boardTool === 'inspect'}
                 onClick={activateCommentTool}
               >
                 <RemixIcon name="chat-new-line" size={14} />
-                <span>Inspect style</span>
+                <span>{t('fileViewer.comment')}</span>
               </button>
               <button
                 type="button"

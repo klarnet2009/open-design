@@ -482,6 +482,8 @@ export const en: Dict = {
   'workingDirPicker.recent': 'Recent directories',
   'handoff.toTarget': 'Hand off to {target}',
   'handoff.openInTarget': 'Open in {target}',
+  'handoff.openAction': 'Open',
+  'handoff.menuTitle': 'Open in which editor?',
   'handoff.action': 'Hand off',
   'handoff.fallbackTitle': 'No editors found on $PATH - opens in {target}',
   'handoff.chooseTargetAria': 'Choose hand-off target',

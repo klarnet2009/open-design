@@ -177,15 +177,13 @@ export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
         >
           {primary ? (
             <>
-              <EditorIcon editorId={primary.id} size={20} />
-              <span className="handoff-trigger-label sr-only">
-                {primaryTitle}
-              </span>
+              <span className="handoff-code-glyph" aria-hidden>&lt;/&gt;</span>
+              <span className="handoff-trigger-label">{t('handoff.openAction')}</span>
             </>
           ) : (
             <>
-              <EditorIcon editorId="finder" size={20} />
-              <span className="handoff-trigger-label sr-only">{primaryTitle}</span>
+              <span className="handoff-code-glyph" aria-hidden>&lt;/&gt;</span>
+              <span className="handoff-trigger-label">{t('handoff.openAction')}</span>
             </>
           )}
         </button>
@@ -202,6 +200,7 @@ export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
       </div>
       {open ? (
         <div className="handoff-menu" role="menu" data-testid="handoff-menu">
+          <div className="handoff-menu-title">{t('handoff.menuTitle')}</div>
           {available.map((editor) => (
             <button
               key={editor.id}

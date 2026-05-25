@@ -1519,11 +1519,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  min-width: 32px;
+  min-width: 58px;
   height: 30px;
-  gap: 0;
-  padding: 0;
+  gap: 5px;
+  padding: 0 8px;
   border: 0;
   background: transparent;
   color: var(--text);
@@ -1561,6 +1560,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 160px;
+}
+.app .handoff-code-glyph {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
 }
 .app .handoff-caret {
   display: inline-flex;
@@ -1608,6 +1614,14 @@
   z-index: 50;
   display: flex;
   flex-direction: column;
+}
+.app .handoff-menu-title {
+  padding: 6px 10px 7px;
+  border-bottom: 1px solid var(--border);
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 16px;
 }
 .app .handoff-menu-item {
   display: inline-flex;
