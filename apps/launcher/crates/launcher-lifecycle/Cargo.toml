@@ -7,5 +7,6 @@ publish = false
 [dependencies]
 launcher-core = { path = "../launcher-core" }
 launcher-platform = { path = "../launcher-platform" }
+launcher-proto = { path = "../launcher-proto" }
 serde = { version = "1.0.228", features = ["derive"] }
 thiserror = "2.0.17"

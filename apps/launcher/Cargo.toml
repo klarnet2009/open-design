@@ -10,6 +10,7 @@ members = [
   "crates/launcher-core",
   "crates/launcher-lifecycle",
   "crates/launcher-platform",
+  "crates/launcher-proto",
 ]
 resolver = "3"
 
@@ -17,6 +18,7 @@ resolver = "3"
 launcher-core = { path = "crates/launcher-core" }
 launcher-lifecycle = { path = "crates/launcher-lifecycle" }
 launcher-platform = { path = "crates/launcher-platform" }
+launcher-proto = { path = "crates/launcher-proto" }
 serde_json = "1.0.145"
 
 [target.'cfg(windows)'.build-dependencies]

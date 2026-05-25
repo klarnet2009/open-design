@@ -6,6 +6,7 @@ Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns the native
 
 - Cold-start launcher config discovery through `launcher.json`.
 - Payload-agnostic cold-start flow: resolve config, build a process spec, spawn the payload, then exit.
+- Runtime descriptor validation and launcher-owned process plan generation.
 - Native stable-entry process startup primitives that are independent of the product runtime being launched.
 - Build-time Windows executable resource metadata, including the launcher icon.
 
@@ -23,7 +24,8 @@ Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns the native
 - Keep the launcher payload-agnostic. A payload is described by a manifest and an entry command; the launcher must not special-case Electron, daemon, web, or Open Design business protocols.
 - Keep platform-specific OS primitives in `crates/launcher-platform`.
 - Keep cross-platform launcher business flow in `crates/launcher-lifecycle`.
-- Keep shared DTOs in `crates/launcher-core`.
+- Keep protocol-shaped app/mode/source/namespace/endpoint/stamp primitives in `crates/launcher-proto`; this crate is hand-written Rust and does not import TypeScript packages.
+- Keep launcher-local resource/update DTOs in `crates/launcher-core`.
 - `launcher.json` lookup order is `--root <dir>` > `OD_LAUNCHER_ROOT` > current working directory > launcher executable directory. Explicit root/env misses must fail instead of falling back.
 - Windows launcher builds must embed an `.ico` through the `OD_LAUNCHER_WIN_ICON` build input, defaulting to `tools/pack/resources/win/icon.ico`.
 
@@ -33,5 +35,6 @@ Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns the native
 cargo fmt --manifest-path apps/launcher/Cargo.toml --check
 cargo test --manifest-path apps/launcher/Cargo.toml --workspace
 cargo build --manifest-path apps/launcher/Cargo.toml --release
-cargo run --manifest-path apps/launcher/Cargo.toml -- --print-config --json --root /path/to/launcher-root
+cargo run --manifest-path apps/launcher/Cargo.toml -- config print --json --root /path/to/launcher-root
+cargo run --manifest-path apps/launcher/Cargo.toml -- runtime plan --json --root /path/to/launcher-root
 ```

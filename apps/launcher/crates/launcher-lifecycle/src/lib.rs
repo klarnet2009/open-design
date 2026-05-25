@@ -1,12 +1,18 @@
 use launcher_core::PayloadEntry;
 use launcher_platform::{LauncherPlatformError, ProcessSpec};
+use launcher_proto::{
+    RuntimeApp, RuntimeEndpoint, RuntimeMode, RuntimeNamespace, RuntimeSource, RuntimeStamp,
+};
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 pub const LAUNCHER_CONFIG_FILE: &str = "launcher.json";
 pub const LAUNCHER_CONFIG_SCHEMA_VERSION: u32 = 1;
 pub const LAUNCHER_ROOT_ENV: &str = "OD_LAUNCHER_ROOT";
+pub const RUNTIME_DESCRIPTOR_SCHEMA_VERSION: u32 = 1;
+pub const RUNTIME_PLAN_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Error)]
 pub enum LauncherLifecycleError {
@@ -25,6 +31,14 @@ pub enum LauncherLifecycleError {
         expected: u32,
         path: String,
     },
+    #[error("launcher config does not contain a runtime descriptor")]
+    MissingRuntimeDescriptor,
+    #[error("unsupported runtime descriptor schema: expected {expected}, got {actual}")]
+    UnsupportedRuntimeSchema { actual: u32, expected: u32 },
+    #[error("runtime descriptor must contain at least one app")]
+    EmptyRuntimeApps,
+    #[error("runtime descriptor reuses endpoint {endpoint}")]
+    DuplicateEndpoint { endpoint: String },
     #[error("{field} must not be empty")]
     EmptyField { field: &'static str },
     #[error("platform error: {0}")]
@@ -45,7 +59,57 @@ pub enum ConfigSource {
 pub struct LauncherConfig {
     pub entry: PayloadEntry,
     pub payload_root: String,
+    #[serde(default)]
+    pub runtime: Option<RuntimeDescriptor>,
     pub schema_version: u32,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeDescriptor {
+    pub apps: RuntimeAppsDescriptor,
+    pub mode: RuntimeMode,
+    pub namespace: RuntimeNamespace,
+    pub namespace_root: String,
+    pub schema_version: u32,
+    pub source: RuntimeSource,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeAppsDescriptor {
+    #[serde(default)]
+    pub daemon: Option<RuntimeAppDescriptor>,
+    #[serde(default)]
+    pub desktop: Option<RuntimeAppDescriptor>,
+    #[serde(default)]
+    pub web: Option<RuntimeAppDescriptor>,
+}
+
+impl RuntimeAppsDescriptor {
+    pub fn iter(&self) -> impl Iterator<Item = (RuntimeApp, &RuntimeAppDescriptor)> {
+        [
+            (RuntimeApp::Daemon, self.daemon.as_ref()),
+            (RuntimeApp::Desktop, self.desktop.as_ref()),
+            (RuntimeApp::Web, self.web.as_ref()),
+        ]
+        .into_iter()
+        .filter_map(|(app, descriptor)| descriptor.map(|descriptor| (app, descriptor)))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.daemon.is_none() && self.desktop.is_none() && self.web.is_none()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeAppDescriptor {
+    pub endpoint: RuntimeEndpoint,
+    pub entry: PayloadEntry,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -64,6 +128,41 @@ pub struct ResolvedLauncherConfig {
     pub payload_root: PathBuf,
     pub process: ProcessSpec,
     pub source: ConfigSource,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimePlan {
+    pub apps: Vec<RuntimeAppPlan>,
+    pub cache_root: PathBuf,
+    pub logs_root: PathBuf,
+    pub mode: RuntimeMode,
+    pub namespace: RuntimeNamespace,
+    pub namespace_root: PathBuf,
+    pub runtime_root: PathBuf,
+    pub schema_version: u32,
+    pub source: RuntimeSource,
+    pub state_root: PathBuf,
+    pub versions_root: PathBuf,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeAppPlan {
+    pub app: RuntimeApp,
+    pub log_path: PathBuf,
+    pub process: RuntimeProcessPlan,
+    pub runtime_file_path: PathBuf,
+    pub stamp: RuntimeStamp,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeProcessPlan {
+    pub args: Vec<String>,
+    pub cwd: PathBuf,
+    pub env: BTreeMap<String, String>,
+    pub executable: PathBuf,
 }
 
 pub fn resolve_launcher_config(search: &ConfigSearch) -> Result<ResolvedLauncherConfig, LauncherLifecycleError> {
@@ -158,6 +257,70 @@ pub fn launch_config(resolved: &ResolvedLauncherConfig) -> Result<(), LauncherLi
     Ok(())
 }
 
+pub fn build_runtime_plan(resolved: &ResolvedLauncherConfig) -> Result<RuntimePlan, LauncherLifecycleError> {
+    let descriptor = resolved
+        .config
+        .runtime
+        .as_ref()
+        .ok_or(LauncherLifecycleError::MissingRuntimeDescriptor)?;
+    if descriptor.schema_version != RUNTIME_DESCRIPTOR_SCHEMA_VERSION {
+        return Err(LauncherLifecycleError::UnsupportedRuntimeSchema {
+            actual: descriptor.schema_version,
+            expected: RUNTIME_DESCRIPTOR_SCHEMA_VERSION,
+        });
+    }
+    if descriptor.apps.is_empty() {
+        return Err(LauncherLifecycleError::EmptyRuntimeApps);
+    }
+
+    let namespace_root = resolve_config_path(&resolved.config_root, &descriptor.namespace_root);
+    let runtime_root = namespace_root.join("runtime");
+    let logs_root = namespace_root.join("logs");
+    let mut endpoints = BTreeSet::new();
+    let mut apps = Vec::new();
+
+    for (app, app_descriptor) in descriptor.apps.iter() {
+        if !endpoints.insert(app_descriptor.endpoint.as_str().to_owned()) {
+            return Err(LauncherLifecycleError::DuplicateEndpoint {
+                endpoint: app_descriptor.endpoint.as_str().to_owned(),
+            });
+        }
+        let process = build_runtime_process_plan(
+            &resolved.config_root,
+            &resolved.payload_root,
+            &app_descriptor.entry,
+        )?;
+        let stamp = RuntimeStamp::new(
+            app,
+            app_descriptor.endpoint.clone(),
+            descriptor.mode,
+            descriptor.namespace.clone(),
+            descriptor.source,
+        );
+        apps.push(RuntimeAppPlan {
+            app,
+            log_path: logs_root.join(app.as_str()).join("latest.log"),
+            process,
+            runtime_file_path: runtime_root.join(format!("{}.json", app.as_str())),
+            stamp,
+        });
+    }
+
+    Ok(RuntimePlan {
+        apps,
+        cache_root: namespace_root.join("cache"),
+        logs_root,
+        mode: descriptor.mode,
+        namespace: descriptor.namespace.clone(),
+        namespace_root: namespace_root.clone(),
+        runtime_root,
+        schema_version: RUNTIME_PLAN_SCHEMA_VERSION,
+        source: descriptor.source,
+        state_root: namespace_root.join("state"),
+        versions_root: namespace_root.join("versions"),
+    })
+}
+
 fn load_from_root(
     root: &Path,
     source: ConfigSource,
@@ -208,6 +371,25 @@ fn resolve_config_path(root: &Path, value: &str) -> PathBuf {
     } else {
         root.join(path)
     }
+}
+
+fn build_runtime_process_plan(
+    config_root: &Path,
+    payload_root: &Path,
+    entry: &PayloadEntry,
+) -> Result<RuntimeProcessPlan, LauncherLifecycleError> {
+    require_non_empty(&entry.executable, "runtime.entry.executable")?;
+    let cwd = entry
+        .cwd
+        .as_deref()
+        .map(|cwd| resolve_config_path(config_root, cwd))
+        .unwrap_or_else(|| payload_root.to_path_buf());
+    Ok(RuntimeProcessPlan {
+        args: entry.args.clone(),
+        cwd,
+        env: entry.env.clone(),
+        executable: resolve_config_path(config_root, &entry.executable),
+    })
 }
 
 fn resolve_search_root(cwd: &Path, root: &Path) -> PathBuf {

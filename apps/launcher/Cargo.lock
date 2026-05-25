@@ -44,12 +44,22 @@ version = "0.1.0"
 dependencies = [
  "launcher-core",
  "launcher-platform",
+ "launcher-proto",
  "serde",
  "thiserror",
 ]
 
 [[package]]
 name = "launcher-platform"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "launcher-proto"
 version = "0.1.0"
 dependencies = [
  "serde",
@@ -70,6 +80,7 @@ dependencies = [
  "launcher-core",
  "launcher-lifecycle",
  "launcher-platform",
+ "launcher-proto",
  "serde_json",
  "winresource",
 ]

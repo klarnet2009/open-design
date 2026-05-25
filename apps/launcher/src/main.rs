@@ -1,11 +1,14 @@
-use launcher_lifecycle::{ConfigSearch, LAUNCHER_ROOT_ENV, resolve_config_with_args};
+use launcher_lifecycle::{
+    ConfigSearch, LAUNCHER_ROOT_ENV, build_runtime_plan, resolve_config_with_args,
+};
 use std::error::Error;
 use std::path::PathBuf;
 
 #[derive(Debug, Eq, PartialEq)]
 enum CommandMode {
+    ConfigPrint,
     Launch,
-    PrintConfig,
+    RuntimePlan,
     Version,
 }
 
@@ -27,10 +30,7 @@ fn main() {
 fn run() -> Result<(), Box<dyn Error>> {
     let options = parse_args(std::env::args().skip(1))?;
     match options.mode {
-        CommandMode::Version => {
-            println!("{}", env!("CARGO_PKG_VERSION"));
-        }
-        CommandMode::PrintConfig => {
+        CommandMode::ConfigPrint => {
             let resolved = resolve_config(&options)?;
             if options.json {
                 println!("{}", serde_json::to_string_pretty(&resolved.config)?);
@@ -44,6 +44,22 @@ fn run() -> Result<(), Box<dyn Error>> {
         CommandMode::Launch => {
             let resolved = resolve_config(&options)?;
             launcher_lifecycle::launch_config(&resolved)?;
+        }
+        CommandMode::RuntimePlan => {
+            let resolved = resolve_config(&options)?;
+            let plan = build_runtime_plan(&resolved)?;
+            if options.json {
+                println!("{}", serde_json::to_string_pretty(&plan)?);
+            } else {
+                println!("namespace={}", plan.namespace);
+                println!("namespaceRoot={}", plan.namespace_root.display());
+                for app in &plan.apps {
+                    println!("{}={}", app.app, app.stamp.endpoint);
+                }
+            }
+        }
+        CommandMode::Version => {
+            println!("{}", env!("CARGO_PKG_VERSION"));
         }
     }
     Ok(())
@@ -62,59 +78,130 @@ fn resolve_config(
 }
 
 fn parse_args(args: impl IntoIterator<Item = String>) -> Result<CliOptions, Box<dyn Error>> {
-    let mut forwarded_args = Vec::new();
-    let mut json = false;
-    let mut mode = CommandMode::Launch;
-    let mut root = None;
-    let mut iter = args.into_iter();
+    let args = args.into_iter().collect::<Vec<_>>();
+    let Some(first) = args.first() else {
+        return Ok(CliOptions {
+            forwarded_args: Vec::new(),
+            json: false,
+            mode: CommandMode::Launch,
+            root: None,
+        });
+    };
 
-    while let Some(arg) = iter.next() {
+    match first.as_str() {
+        "config" => parse_config_command(&args[1..]),
+        "runtime" => parse_runtime_command(&args[1..]),
+        "version" | "--version" | "-V" => Ok(CliOptions {
+            forwarded_args: Vec::new(),
+            json: false,
+            mode: CommandMode::Version,
+            root: None,
+        }),
+        "--help" | "-h" => {
+            print_help();
+            std::process::exit(0);
+        }
+        _ => parse_launch_args(&args),
+    }
+}
+
+fn parse_config_command(args: &[String]) -> Result<CliOptions, Box<dyn Error>> {
+    let Some(command) = args.first() else {
+        return Err("expected config print".into());
+    };
+    if command != "print" {
+        return Err(format!("unknown config command: {command}").into());
+    }
+    let common = parse_common_options(&args[1..])?;
+    Ok(CliOptions {
+        forwarded_args: Vec::new(),
+        json: common.json,
+        mode: CommandMode::ConfigPrint,
+        root: common.root,
+    })
+}
+
+fn parse_runtime_command(args: &[String]) -> Result<CliOptions, Box<dyn Error>> {
+    let Some(command) = args.first() else {
+        return Err("expected runtime plan".into());
+    };
+    if command != "plan" {
+        return Err(format!("unknown runtime command: {command}").into());
+    }
+    let common = parse_common_options(&args[1..])?;
+    Ok(CliOptions {
+        forwarded_args: Vec::new(),
+        json: common.json,
+        mode: CommandMode::RuntimePlan,
+        root: common.root,
+    })
+}
+
+fn parse_launch_args(args: &[String]) -> Result<CliOptions, Box<dyn Error>> {
+    let mut forwarded_args = Vec::new();
+    let mut root = None;
+    let mut index = 0;
+    while index < args.len() {
+        let arg = &args[index];
         match arg.as_str() {
             "--" => {
-                forwarded_args.extend(iter);
+                forwarded_args.extend(args[index + 1..].iter().cloned());
                 break;
             }
-            "--help" | "-h" => {
-                print_help();
-                std::process::exit(0);
-            }
-            "--json" => {
-                json = true;
-            }
-            "--print-config" => {
-                mode = CommandMode::PrintConfig;
-            }
             "--root" => {
-                root = Some(PathBuf::from(take_value(&mut iter, "--root")?));
-            }
-            "--version" | "-V" => {
-                mode = CommandMode::Version;
+                index += 1;
+                let Some(value) = args.get(index) else {
+                    return Err("--root requires a value".into());
+                };
+                root = Some(PathBuf::from(value));
             }
             _ if arg.starts_with("--root=") => {
-                root = Some(PathBuf::from(value_after_equals(&arg, "--root=")));
+                root = Some(PathBuf::from(value_after_equals(arg, "--root=")));
             }
             _ => {
-                forwarded_args.push(arg);
-                forwarded_args.extend(iter);
+                forwarded_args.extend(args[index..].iter().cloned());
                 break;
             }
         }
+        index += 1;
     }
 
     Ok(CliOptions {
         forwarded_args,
-        json,
-        mode,
+        json: false,
+        mode: CommandMode::Launch,
         root,
     })
 }
 
-fn take_value(
-    iter: &mut impl Iterator<Item = String>,
-    flag: &'static str,
-) -> Result<String, Box<dyn Error>> {
-    iter.next()
-        .ok_or_else(|| format!("{flag} requires a value").into())
+struct CommonOptions {
+    json: bool,
+    root: Option<PathBuf>,
+}
+
+fn parse_common_options(args: &[String]) -> Result<CommonOptions, Box<dyn Error>> {
+    let mut json = false;
+    let mut root = None;
+    let mut index = 0;
+    while index < args.len() {
+        let arg = &args[index];
+        match arg.as_str() {
+            "--json" => json = true,
+            "--root" => {
+                index += 1;
+                let Some(value) = args.get(index) else {
+                    return Err("--root requires a value".into());
+                };
+                root = Some(PathBuf::from(value));
+            }
+            _ if arg.starts_with("--root=") => {
+                root = Some(PathBuf::from(value_after_equals(arg, "--root=")));
+            }
+            _ => return Err(format!("unknown option: {arg}").into()),
+        }
+        index += 1;
+    }
+    Ok(CommonOptions { json, root })
 }
 
 fn value_after_equals<'a>(arg: &'a str, prefix: &'static str) -> &'a str {
@@ -125,7 +212,8 @@ fn print_help() {
     println!(
         "Usage:
   open-design-launcher [--root <dir>] [--] [payload args...]
-  open-design-launcher --print-config [--json] [--root <dir>]
-  open-design-launcher --version"
+  open-design-launcher config print [--json] [--root <dir>]
+  open-design-launcher runtime plan [--json] [--root <dir>]
+  open-design-launcher version"
     );
 }
