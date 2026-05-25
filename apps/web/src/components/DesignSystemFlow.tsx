@@ -37,6 +37,11 @@ import {
 } from '../runtime/design-system-package-audit';
 import { deriveFileOps } from '../runtime/file-ops';
 import { latestTodosFromEvents } from '../runtime/todos';
+import {
+  createFileSystemReadError,
+  FILE_SYSTEM_READ_ERROR_MESSAGE,
+  isFileSystemReadError,
+} from '../utils/fileSystemErrors';
 import { randomUUID } from '../utils/uuid';
 import type {
   AgentEvent,
@@ -741,6 +746,7 @@ export function DesignSystemCreationFlow({
               directory
               onBrowseFolder={() => void handlePickCodeFolder()}
               onRemoveName={handleRemoveCodeFolder}
+              onError={setError}
               onFiles={(_names, files) => {
                 const stagedFiles = selectLocalCodeFiles(files);
                 const stagedNames = stagedFiles.map((file) => localCodeRelativePath(file));
@@ -758,6 +764,7 @@ export function DesignSystemCreationFlow({
               prompt="Drop .fig here or browse"
               accept=".fig"
               names={state.figFiles}
+              onError={setError}
               onFiles={(_names, files) => {
                 const stagedFiles = selectFigmaFiles(files);
                 const stagedNames = stagedFiles.map((file) => resourceRelativePath(file));
@@ -773,6 +780,7 @@ export function DesignSystemCreationFlow({
               label="Add assets"
               prompt="Drag files here or browse"
               names={state.assetFiles}
+              onError={setError}
               onFiles={(_names, files) => {
                 const stagedFiles = selectAssetFiles(files);
                 const stagedNames = stagedFiles.map((file) => resourceRelativePath(file));
@@ -2374,6 +2382,7 @@ interface DropZoneProps {
   directory?: boolean;
   onBrowseFolder?: () => void;
   onRemoveName?: (name: string) => void;
+  onError?: (message: string | null) => void;
   onFiles: (names: string[], files: File[]) => void;
 }
 interface WebkitFileSystemEntry {
@@ -2526,16 +2535,26 @@ function DropZone({
   directory,
   onBrowseFolder,
   onRemoveName,
+  onError,
   onFiles,
 }: DropZoneProps) {
   function readFiles(files: FileList | File[] | null) {
     const nextFiles = Array.from(files ?? []);
     const nextNames = nextFiles.map((file) => localCodeRelativePath(file));
-    if (nextNames.length > 0) onFiles(nextNames, nextFiles);
+    if (nextNames.length > 0) {
+      onError?.(null);
+      onFiles(nextNames, nextFiles);
+    }
   }
   async function readDrop(dataTransfer: DataTransfer) {
-    const nextFiles = await filesFromDataTransfer(dataTransfer);
-    readFiles(nextFiles);
+    onError?.(null);
+    try {
+      const nextFiles = await filesFromDataTransfer(dataTransfer);
+      readFiles(nextFiles);
+    } catch (error) {
+      if (!isFileSystemReadError(error)) throw error;
+      onError?.(FILE_SYSTEM_READ_ERROR_MESSAGE);
+    }
   }
   const directoryProps = directory ? ({ webkitdirectory: '', directory: '' } as Record<string, string>) : {};
 
@@ -2585,17 +2604,24 @@ function DropZone({
 }
 
 async function filesFromDataTransfer(dataTransfer: DataTransfer): Promise<File[]> {
+  const fallbackFiles = Array.from(dataTransfer.files ?? []);
   const items = Array.from(dataTransfer.items ?? []);
+  if (items.length === 0) return fallbackFiles;
   const entries = items
     .map((item) => {
       const getter = (item as { webkitGetAsEntry?: () => unknown }).webkitGetAsEntry;
       return getter?.call(item) ?? null;
     })
     .filter(isWebkitFileSystemEntry);
-  if (entries.length === 0) return Array.from(dataTransfer.files ?? []);
-  const droppedFiles = await Promise.all(entries.map((entry) => filesFromEntry(entry, entry.name)));
-  const flattened = droppedFiles.flat();
-  return flattened.length > 0 ? flattened : Array.from(dataTransfer.files ?? []);
+  if (entries.length === 0) return fallbackFiles;
+  const results = await Promise.allSettled(entries.map((entry) => filesFromEntry(entry, entry.name)));
+  const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+  if (rejected) {
+    if (fallbackFiles.length > 0) return fallbackFiles;
+    throw rejected.reason;
+  }
+  const droppedFiles = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
+  return droppedFiles.length > 0 ? droppedFiles : fallbackFiles;
 }
 
 function isWebkitFileSystemEntry(entry: unknown): entry is WebkitFileSystemEntry {
@@ -2623,7 +2649,9 @@ async function filesFromEntry(entry: WebkitFileSystemEntry, relativePath: string
 
 function fileFromEntry(entry: WebkitFileSystemFileEntry): Promise<File> {
   return new Promise((resolve, reject) => {
-    entry.file(resolve, reject);
+    entry.file(resolve, (error) => {
+      reject(createFileSystemReadError('Could not read dropped file', error));
+    });
   });
 }
 
@@ -2639,7 +2667,9 @@ function readAllDirectoryEntries(entry: WebkitFileSystemDirectoryEntry): Promise
         }
         entries.push(...batch);
         readNextBatch();
-      }, reject);
+      }, (error) => {
+        reject(createFileSystemReadError('Could not read dropped folder', error));
+      });
     }
     readNextBatch();
   });

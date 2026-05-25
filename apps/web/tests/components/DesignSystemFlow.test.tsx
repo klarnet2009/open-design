@@ -997,6 +997,39 @@ describe('DesignSystemCreationFlow', () => {
     expect(onCreated).toHaveBeenCalledWith(project.id, project);
   });
 
+  it('shows a recoverable error when a dragged local code entry cannot be read', async () => {
+    const { container } = render(
+      <DesignSystemCreationFlow
+        onBack={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    const dropZone = container.querySelector('input[webkitdirectory]')?.closest('.ds-drop-zone') as HTMLElement | null;
+
+    fireEvent.drop(dropZone!, {
+      dataTransfer: {
+        files: [],
+        items: [
+          {
+            webkitGetAsEntry: () => ({
+              isFile: true,
+              isDirectory: false,
+              name: 'stale-token.css',
+              file: (_done: (file: File) => void, fail?: (error: DOMException) => void) => {
+                fail?.(new DOMException('missing', 'NotFoundError'));
+              },
+            }),
+          },
+        ],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Could not read one or more dropped files or folders/)).toBeTruthy();
+    });
+    expect(screen.queryByText(/local code files selected/)).toBeNull();
+  });
+
   it('recursively reads a dragged local code folder into the design-system project context', async () => {
     const system: DesignSystemDetail = {
       id: 'user:dragged-folder-design-system',
