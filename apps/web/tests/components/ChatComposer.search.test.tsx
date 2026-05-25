@@ -62,6 +62,28 @@ describe('ChatComposer /search command', () => {
     );
   });
 
+  it('queues a typed follow-up when send is clicked during streaming', async () => {
+    const onSend = vi.fn();
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming
+        onEnsureProject={async () => 'project-1'}
+        onSend={onSend}
+        onStop={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('chat-composer-input'), {
+      target: { value: 'follow-up while busy' },
+    });
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    expect(onSend).toHaveBeenCalledWith('follow-up while busy', [], [], undefined);
+  });
+
   it('auto-sends concurrent queued visual annotations when streaming ends', async () => {
     const onSend = vi.fn();
     const firstUpload = deferred<Awaited<ReturnType<typeof uploadProjectFiles>>>();
