@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { Button, Input, Select } from '@open-design/components';
 import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
 import {
   anonymizeArtifactId,
@@ -2018,18 +2019,17 @@ export function CommentSidePanel({
       {selectedCount > 0 ? (
         <div className="comment-side-selectbar" data-testid="comment-side-selectbar">
           <span className="comment-side-selectcount">{t('chat.comments.nSelected', { n: selectedCount })}</span>
-          <button type="button" className="ghost" onClick={onClearSelection}>
+          <Button variant="ghost" onClick={onClearSelection}>
             {t('chat.comments.clear')}
-          </button>
-          <button
-            type="button"
-            className="primary"
+          </Button>
+          <Button
+            variant="primary"
             data-testid="comment-side-send-claude"
             disabled={sending}
             onClick={() => void onSendSelected()}
           >
             {sending ? t('chat.comments.sending') : t('chat.comments.sendToChat')}
-          </button>
+          </Button>
         </div>
       ) : null}
     </aside>
@@ -2156,9 +2156,9 @@ function InspectPanel({
           <strong title={target.label || target.elementId}>{target.label || target.elementId}</strong>
           <code title={target.selector}>{target.elementId}</code>
         </div>
-        <button type="button" className="ghost" onClick={onClose} aria-label="Close inspect">
+        <Button variant="ghost" onClick={onClose} aria-label="Close inspect">
           ×
-        </button>
+        </Button>
       </header>
 
       {target.clickedDescendant ? (
@@ -2181,14 +2181,14 @@ function InspectPanel({
         <div className="inspect-section-label">Colors</div>
         <div className="inspect-row">
           <label htmlFor="ip-color">Text</label>
-          <input
+          <Input
             id="ip-color"
             data-testid="inspect-color"
             type="color"
             value={colorHex}
             onChange={(e) => setVal('color', e.target.value)}
           />
-          <input
+          <Input
             type="text"
             value={colorHex}
             onChange={(e) => setVal('color', e.target.value)}
@@ -2197,14 +2197,14 @@ function InspectPanel({
         </div>
         <div className="inspect-row">
           <label htmlFor="ip-bg">Background</label>
-          <input
+          <Input
             id="ip-bg"
             data-testid="inspect-bg"
             type="color"
             value={bgHex}
             onChange={(e) => setVal('background-color', e.target.value)}
           />
-          <input
+          <Input
             type="text"
             value={bgHex}
             onChange={(e) => setVal('background-color', e.target.value)}
@@ -2217,7 +2217,7 @@ function InspectPanel({
         <div className="inspect-section-label">Typography</div>
         <div className="inspect-row">
           <label htmlFor="ip-fs">Size</label>
-          <input
+          <Input
             id="ip-fs"
             data-testid="inspect-font-size"
             type="range"
@@ -2231,7 +2231,7 @@ function InspectPanel({
         </div>
         <div className="inspect-row">
           <label htmlFor="ip-fw">Weight</label>
-          <select
+          <Select
             id="ip-fw"
             value={fontWeight}
             onChange={(e) => setVal('font-weight', e.target.value)}
@@ -2239,11 +2239,11 @@ function InspectPanel({
             {['100', '300', '400', '500', '600', '700', '800', '900'].map((w) => (
               <option key={w} value={w}>{w}</option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="inspect-row">
           <label htmlFor="ip-ta">Align</label>
-          <select
+          <Select
             id="ip-ta"
             value={textAlign}
             onChange={(e) => setVal('text-align', e.target.value)}
@@ -2251,7 +2251,7 @@ function InspectPanel({
             {['left', 'center', 'right', 'justify'].map((a) => (
               <option key={a} value={a}>{a}</option>
             ))}
-          </select>
+          </Select>
         </div>
       </section>
 
@@ -2259,7 +2259,7 @@ function InspectPanel({
         <div className="inspect-section-label">Spacing &amp; Shape</div>
         <div className="inspect-row">
           <label htmlFor="ip-pad">Padding</label>
-          <input
+          <Input
             id="ip-pad"
             data-testid="inspect-padding"
             type="range"
@@ -2273,7 +2273,7 @@ function InspectPanel({
         </div>
         <div className="inspect-row">
           <label htmlFor="ip-rad">Radius</label>
-          <input
+          <Input
             id="ip-rad"
             data-testid="inspect-radius"
             type="range"
@@ -2288,25 +2288,23 @@ function InspectPanel({
       </section>
 
       <footer className="inspect-panel-footer">
-        <button
-          type="button"
-          className="ghost"
+        <Button
+          variant="ghost"
           onClick={() => {
             setDraft({});
             onResetElement(target.elementId);
           }}
         >
           Reset element
-        </button>
-        <button
-          type="button"
-          className="primary"
+        </Button>
+        <Button
+          variant="primary"
           data-testid="inspect-save"
           disabled={saving}
           onClick={onSaveToSource}
         >
           {saving ? 'Saving…' : justSaved ? 'Saved ✓' : 'Save to source'}
-        </button>
+        </Button>
       </footer>
       {error ? <div className="inspect-panel-error">{error}</div> : null}
     </aside>

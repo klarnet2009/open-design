@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import type { ButtonHTMLAttributes } from 'react';
 
-import { joinClassNames } from './class-names.js';
+import { joinClassNames } from './class-names';
 import styles from './button.module.css';
 
 export type ButtonVariant = 'default' | 'primary' | 'primary-ghost' | 'ghost' | 'subtle';
@@ -14,15 +14,15 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClassNames: Record<ButtonVariant, string | undefined> = {
   default: undefined,
-  primary: styles.primary,
-  'primary-ghost': styles.primaryGhost,
-  ghost: styles.ghost,
-  subtle: styles.subtle,
+  primary: joinClassNames(styles.primary, 'primary'),
+  'primary-ghost': joinClassNames(styles.primaryGhost, 'primary-ghost'),
+  ghost: joinClassNames(styles.ghost, 'ghost'),
+  subtle: joinClassNames(styles.subtle, 'subtle'),
 };
 
 const sizeClassNames: Record<ButtonSize, string | undefined> = {
   default: undefined,
-  icon: styles.icon,
+  icon: joinClassNames(styles.icon, 'icon-btn'),
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(

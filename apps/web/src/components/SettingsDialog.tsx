@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
+import { Button, VisuallyHidden } from '@open-design/components';
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import {
   agentIdToTracking,
@@ -4944,9 +4945,9 @@ function MediaProvidersSection({
         // Off-screen announcement so assistive tech still hears the
         // success state even though the visible feedback collapses
         // into a transient button label change.
-        <span className="sr-only" role="status">
+        <VisuallyHidden role="status">
           {reloadNotice.message}
-        </span>
+        </VisuallyHidden>
       ) : null}
       {onReloadMediaProviders ? (
         <div className="media-provider-reload-row">
@@ -6130,7 +6131,7 @@ function NotificationsSection({
         ) : null}
         {notif.desktopEnabled && permission === 'granted' ? (
           <>
-            <button type="button" className="ghost" onClick={() => {
+            <Button variant="ghost" onClick={() => {
               trackSettingsNotificationsClick(analytics.track, {
                 page_name: 'settings',
                 area: 'notifications',
@@ -6139,7 +6140,7 @@ function NotificationsSection({
               void sendTestNotification();
             }}>
               {t('settings.notifyTest')}
-            </button>
+            </Button>
             {testStatus ? <p className="hint" role="status">{t(testStatus)}</p> : null}
           </>
         ) : null}

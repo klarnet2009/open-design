@@ -1,13 +1,12 @@
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 
-import { joinClassNames } from './class-names.js';
+import { joinClassNames } from './class-names';
 import styles from './visually-hidden.module.css';
 
-export interface VisuallyHiddenProps {
+export interface VisuallyHiddenProps extends HTMLAttributes<HTMLSpanElement> {
   children: ReactNode;
-  className?: string;
 }
 
-export function VisuallyHidden({ children, className }: VisuallyHiddenProps) {
-  return <span className={joinClassNames(styles.visuallyHidden, className)}>{children}</span>;
+export function VisuallyHidden({ children, className, ...props }: VisuallyHiddenProps) {
+  return <span className={joinClassNames(styles.visuallyHidden, className)} {...props}>{children}</span>;
 }

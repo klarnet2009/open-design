@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { Button, Textarea } from '@open-design/components';
 
 import { selectionKindLabel, type PreviewCommentSnapshot } from '../comments';
 import type { Dict } from '../i18n/types';
@@ -131,14 +132,14 @@ export function BoardComposerPopover({
           {notes.map((note, index) => (
             <div key={`${target.elementId}-${index}`} className="board-note-item">
               <span>{note}</span>
-              <button type="button" className="ghost" onClick={() => onRemoveQueuedNote(index)}>
+              <Button variant="ghost" onClick={() => onRemoveQueuedNote(index)}>
                 {t('chat.comments.remove')}
-              </button>
+              </Button>
             </div>
           ))}
         </div>
       ) : null}
-      <textarea
+      <Textarea
         data-testid="comment-popover-input"
         value={draft}
         autoFocus
@@ -159,35 +160,32 @@ export function BoardComposerPopover({
         ) : null}
         <div className="comment-popover-actions-end">
           {target.selectionKind === 'pod' ? (
-            <button
-              type="button"
-              className="ghost"
+            <Button
+              variant="ghost"
               data-testid="comment-popover-add-note"
               disabled={!draft.trim()}
               onClick={onAddDraft}
             >
               {t('chat.comments.addNote')}
-            </button>
+            </Button>
           ) : (
-            <button
-              type="button"
-              className="ghost"
+            <Button
+              variant="ghost"
               data-testid="comment-popover-save"
               disabled={!draft.trim()}
               onClick={() => void onSaveComment()}
             >
               {t('chat.comments.comment')}
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            className="primary"
+          <Button
+            variant="primary"
             data-testid="comment-add-send"
             disabled={pendingCount === 0 || sending}
             onClick={() => void onSendBatch()}
           >
             {sending ? t('chat.comments.sending') : t('chat.comments.sendToChat')}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
