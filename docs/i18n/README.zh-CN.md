@@ -1,6 +1,6 @@
 <h1 align="center">Open Design</h1>
 
-> 🔥 **Open Design 0.8.0 已发布。** 这一版重点上线两件事：**Plugin 体系**，让模板和工作流像文件夹一样添加、复制、分享；**Design System**，支持导入品牌规范并沉淀为可复用的 [`DESIGN.md`](../../design-systems/README.md)。 [下载 0.8.0](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0) · [参与讨论](https://github.com/nexu-io/open-design/discussions/1727)
+> 🔥 **Open Design 0.8.0 已发布。** 这一版重点上线两件事：**Plugin 体系**，让模板和工作流像文件夹一样添加、复制、分享；**Design System**，支持导入品牌规范并沉淀为可复用的 [`DESIGN.md`](../../design-systems)。 [下载 0.8.0](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0) · [参与讨论](https://github.com/nexu-io/open-design/discussions/1727)
 
 <br/>
 
@@ -81,7 +81,7 @@
 | **本地运行** | ❌ 仅云端 | ❌ 数据强依赖云端 | ❌ 仅云端 | ✅ 桌面客户端 + daemon |
 | **Agent** | 锁 Anthropic | Make 模式锁自家 | 锁自家模型 | ✅ 16 个 CLI 任选 |
 | **BYOK** | ❌ | ❌ | 部分 | ✅ Anthropic / OpenAI / Azure / Google |
-| **品牌设计体系** | 内置但不可换 | 团队 Library（私域） | 主题 JSON | ✅ 129 个 [`DESIGN.md`](../../design-systems/README.md) 体系，可自定义 |
+| **品牌设计体系** | 内置但不可换 | 团队 Library（私域） | 主题 JSON | ✅ 129 个 [`DESIGN.md`](../../design-systems) 体系，可自定义 |
 | **Plugin 扩展** | 闭源 | Plugin 市场（受平台审核） | 闭源 | ✅ 拖入文件夹即生效 |
 | **HTML 视频** | ❌ | ❌ | ❌ | ✅ HyperFrames HTML→MP4 |
 | **场景** | 通用设计 | UI / 原型 / 协作 | 偏代码原型 | ✅ 设计 / 视频 / 营销 / 运营 / 产品 |
@@ -155,7 +155,7 @@
 - 🖥️ **桌面客户端优先** ── 设计天然发生在桌面端；本地文件、Figma 导出、代码仓库直接可读，Agent 拥有终端执行、文件操作、进程调度全部能力
 - 🤖 **16 个 Coding Agent** ── Claude Code · Codex · Cursor Agent · OpenClaw · Hermes Agent · Deepseek TUI · Kimi · Qoder · Copilot CLI 等，自动检测 `PATH` 上已装好的 CLI
 - 🎬 **HTML 视频全流程** ── HyperFrames 让你用 HTML/CSS/JS 编程式产出营销视频、产品 demo 和发布宣传片，从脚本到 MP4 一站式交付
-- 🎨 **Design System 接入与预设** ── 支持 GitHub / Figma / 本地代码导入，也预设 129 个 [`DESIGN.md`](../../design-systems/README.md) 品牌体系；企业版即将上线
+- 🎨 **Design System 接入与预设** ── 支持 GitHub / Figma / 本地代码导入，也预设 129 个 [`DESIGN.md`](../../design-systems) 品牌体系；企业版即将上线
 - 🛠️ **模板库 + Plugin** ── 沉淀海量优质模板，内置多类 Plugin 工作流，覆盖原型、Slides、海报、仪表盘、社媒、周报、OKR、看板等
 - 🎨 **多模态输出** ── HTML 原型、网页 Slides、gpt-image-2 静帧、Seedance 2.0 电影感视频、HyperFrames HTML→MP4 动效
 - 🔌 **每一层都 BYOK** ── Anthropic / OpenAI / Azure / Google + 14 家媒体供应商（Volcengine / MiniMax / FishAudio / Replicate / ElevenLabs / Suno …）
