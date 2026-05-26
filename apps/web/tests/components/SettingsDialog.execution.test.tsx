@@ -1383,12 +1383,52 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
-    expect(screen.getByRole('button', { name: /^AMR\b/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
+    expect(screen.queryByText('1.0.0')).toBeNull();
     expect(screen.queryByText(/AMR \(vela\)/i)).toBeNull();
     expect(screen.queryByText(/vela/i)).toBeNull();
     expect(screen.queryByText(/Not signed in/i)).toBeNull();
-    expect(await screen.findByRole('button', { name: 'Sign in' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Test' })).toBeTruthy();
+    expect(screen.getByText('Officially maintained')).toBeTruthy();
+    expect(screen.getByText('Lower price')).toBeTruthy();
+    expect(screen.getByText('Many models')).toBeTruthy();
+    expect(screen.getByText('Limited bonus: +100%')).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Authorize' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Test' })).toBeNull();
+  });
+
+  it('only shows the AMR authorization action after selecting the AMR card', async () => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({ loggedIn: false, profile: 'local', user: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    const codexAgent = availableAgents.find((agent) => agent.id === 'codex');
+    expect(codexAgent).toBeTruthy();
+    if (!codexAgent) throw new Error('missing codex test agent');
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: codexAgent.id },
+      { agents: [amrAgent, codexAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*2 installed/i }));
+    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Authorize' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Open Design AMR\b/ }));
+
+    expect(await screen.findByRole('button', { name: 'Authorize' })).toBeTruthy();
   });
 
   it('renders the signed-in AMR account state inside Settings without leaking vela branding', async () => {
@@ -1427,6 +1467,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
     expect(screen.getByText('signed-in@example.com')).toBeTruthy();
     expect(screen.queryByText(/AMR \(vela\)/i)).toBeNull();
     expect(screen.queryByText(/^vela$/i)).toBeNull();
@@ -1480,7 +1521,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
       { agents: [amrAgent] },
     );
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
-    expect(await screen.findByRole('button', { name: 'Sign in' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Authorize' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();
     second.unmount();
   });
@@ -1524,12 +1565,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^AMR\b/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
 
-    expect(await screen.findByRole('button', { name: 'Sign in' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^AMR\b/ })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Authorize' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
     expect(
       onPersist.mock.calls.some(
         ([nextConfig]) =>

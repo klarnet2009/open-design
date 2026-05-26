@@ -428,7 +428,7 @@ function cleanAgentVersionLabel(
 }
 
 function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'AMR' : agent.name;
+  return agent.id === 'amr' ? 'Open Design AMR' : agent.name;
 }
 
 export function mergeProviderModelOptions(
@@ -2513,13 +2513,34 @@ export function SettingsDialog({
                           const active = cfg.agentId === a.id;
                           const running =
                             active && agentTestState.status === 'running';
+                          const isAmrAgent = a.id === 'amr';
                           const description = AGENT_SHORT_DESCRIPTIONS[a.id];
                           const agentName = displayAgentName(a);
                           const modelSummary = agentModelSummary(a);
-                          const versionLabel = cleanAgentVersionLabel(
-                            a.name,
-                            a.version,
-                          );
+                          const amrBenefits = [
+                            t('settings.amrBenefitOfficial'),
+                            t('settings.amrBenefitLowerPrice'),
+                            t('settings.amrBenefitManyModels'),
+                          ];
+                          const versionLabel =
+                            isAmrAgent
+                              ? ''
+                              : cleanAgentVersionLabel(a.name, a.version);
+                          const metaLabel =
+                            a.authStatus === 'missing'
+                              ? t('settings.agentAuthRequired')
+                              : a.authStatus === 'unknown'
+                                ? t('settings.agentAuthUnknown')
+                                : versionLabel
+                                  ? versionLabel
+                                  : a.id === 'amr'
+                                    ? ''
+                                    : t('common.installed');
+                          const metaTitle =
+                            a.authStatus === 'missing' ||
+                            a.authStatus === 'unknown'
+                              ? (a.authMessage ?? a.path ?? '')
+                              : (a.path ?? '');
                           const cardEl = (
                             <div
                               key={a.id}
@@ -2543,59 +2564,74 @@ export function SettingsDialog({
                                     setCfg((c) => ({ ...c, agentId: a.id }));
                                   }}
                                   aria-pressed={active}
-                                >
-                                  <AgentIcon id={a.id} size={32} />
-                                  <div className="agent-card-body">
-                                    <div className="agent-card-name">
-                                      <span>{agentName}</span>
-                                      {description ? (
-                                        <>
+                                  >
+                                    <AgentIcon id={a.id} size={32} />
+                                    <div className="agent-card-body">
+                                      <div
+                                        className={
+                                          'agent-card-name' +
+                                          (isAmrAgent
+                                            ? ' agent-card-name--amr'
+                                            : '')
+                                        }
+                                      >
+                                        <span className="agent-card-title">
+                                          {agentName}
+                                        </span>
+                                        {isAmrAgent ? (
                                           <span
-                                            className="agent-card-name-divider"
+                                            className="agent-card-benefits"
                                             aria-hidden="true"
                                           >
-                                            ·
+                                            {amrBenefits.map((benefit) => (
+                                              <span
+                                                key={benefit}
+                                                className="agent-card-benefit"
+                                              >
+                                                {benefit}
+                                              </span>
+                                            ))}
+                                            <span className="agent-card-promo">
+                                              {t('settings.amrPromoBonus')}
+                                            </span>
                                           </span>
-                                          <span className="agent-card-tagline">
-                                            {description}
-                                          </span>
-                                        </>
-                                      ) : null}
-                                    </div>
-                                    <div className="agent-card-meta">
-                                      {a.authStatus === 'missing' ? (
-                                        <span title={a.authMessage ?? a.path ?? ''}>
-                                          {t('settings.agentAuthRequired')}
-                                        </span>
-                                      ) : a.authStatus === 'unknown' ? (
-                                        <span title={a.authMessage ?? a.path ?? ''}>
-                                          {t('settings.agentAuthUnknown')}
-                                        </span>
-                                      ) : versionLabel ? (
-                                        <span title={a.path ?? ''}>
-                                          {versionLabel}
-                                        </span>
-                                      ) : (
-                                        <span title={a.path ?? ''}>
-                                          {t('common.installed')}
-                                        </span>
-                                      )}
-                                    </div>
-                                    {!active && modelSummary ? (
-                                      <div className="agent-card-model-summary">
-                                        <span>{t('settings.modelPicker')}</span>
-                                        <strong>{modelSummary}</strong>
+                                        ) : description ? (
+                                          <>
+                                            <span
+                                              className="agent-card-name-divider"
+                                              aria-hidden="true"
+                                            >
+                                              ·
+                                            </span>
+                                            <span className="agent-card-tagline">
+                                              {description}
+                                            </span>
+                                          </>
+                                        ) : null}
                                       </div>
-                                    ) : null}
+                                      {metaLabel ? (
+                                        <div className="agent-card-meta">
+                                          <span title={metaTitle}>
+                                            {metaLabel}
+                                          </span>
+                                        </div>
+                                      ) : null}
+                                      {!active && modelSummary ? (
+                                        <div className="agent-card-model-summary">
+                                          <span>{t('settings.modelPicker')}</span>
+                                          <strong>{modelSummary}</strong>
+                                        </div>
+                                      ) : null}
                                   </div>
                                 </button>
-                                {a.id === 'amr' ? (
+                                {isAmrAgent && active ? (
                                   <AmrLoginPill
-                                    className="amr-account-control"
+                                    className="agent-card-amr-auth"
                                     hideSignedOutStatus
+                                    signInLabel={t('settings.amrAuthorize')}
                                   />
                                 ) : null}
-                                {active ? (
+                                {active && !isAmrAgent ? (
                                   <button
                                     type="button"
                                     className={

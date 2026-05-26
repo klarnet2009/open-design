@@ -63,8 +63,39 @@ const API_PROTOCOL_TABS: Array<{ id: ApiProtocol; title: string }> = [
   { id: 'google', title: 'Google' },
 ];
 
+const AMR_REMINDER_SEEN_KEY = 'open-design:inline-amr-cli-reminder-seen:v2';
+let amrReminderSeenFallback = false;
+
+function readAmrReminderSeen(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    return window.localStorage
+      ? window.localStorage.getItem(AMR_REMINDER_SEEN_KEY) === '1'
+      : amrReminderSeenFallback;
+  } catch {
+    return amrReminderSeenFallback;
+  }
+}
+
+function markAmrReminderSeen(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (window.localStorage) {
+      window.localStorage.setItem(AMR_REMINDER_SEEN_KEY, '1');
+      return;
+    }
+  } catch {
+    // Ignore storage failures; the reminder is purely advisory UI.
+  }
+  amrReminderSeenFallback = true;
+}
+
 function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'AMR' : agent.name;
+  return agent.id === 'amr' ? 'Open Design AMR' : agent.name;
+}
+
+function displayAgentChipName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
+  return agent.id === 'amr' ? 'AMR' : displayAgentName(agent);
 }
 
 export function InlineModelSwitcher({
@@ -84,6 +115,9 @@ export function InlineModelSwitcher({
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
   const [amrLoginError, setAmrLoginError] = useState(false);
+  const [amrReminderSeen, setAmrReminderSeen] = useState(readAmrReminderSeen);
+  const [showAmrReminderInPopover, setShowAmrReminderInPopover] =
+    useState(false);
   const amrPollRef = useRef<number | null>(null);
   const amrLoginStartedAtRef = useRef<number | null>(null);
 
@@ -251,6 +285,10 @@ export function InlineModelSwitcher({
     () => agents.find((a) => a.id === config.agentId) ?? null,
     [agents, config.agentId],
   );
+  const amrInstalled = installedAgents.some((a) => a.id === 'amr');
+  const shouldOfferAmrReminder =
+    config.mode === 'daemon' && config.agentId !== 'amr' && amrInstalled;
+  const showAmrReminder = shouldOfferAmrReminder && !amrReminderSeen;
 
   const currentChoice =
     (config.agentId && config.agentModels?.[config.agentId]) || {};
@@ -301,7 +339,7 @@ export function InlineModelSwitcher({
   const chipPrimary =
     config.mode === 'daemon'
       ? currentAgent
-        ? displayAgentName(currentAgent)
+        ? displayAgentChipName(currentAgent)
         : t('inlineSwitcher.noAgent')
       : apiProtocolLabel(apiProtocol);
   const chipModel =
@@ -311,6 +349,24 @@ export function InlineModelSwitcher({
         : t('inlineSwitcher.modelDefault')
       : config.model.trim() || t('inlineSwitcher.modelDefault');
 
+  const handleChipClick = useCallback(() => {
+    const nextOpen = !open;
+    if (nextOpen && showAmrReminder) {
+      setShowAmrReminderInPopover(true);
+      setAmrReminderSeen(true);
+      markAmrReminderSeen();
+    } else if (!nextOpen) {
+      setShowAmrReminderInPopover(false);
+    }
+    setOpen(nextOpen);
+  }, [open, showAmrReminder]);
+
+  useEffect(() => {
+    if (!open || config.mode !== 'daemon' || config.agentId === 'amr') {
+      setShowAmrReminderInPopover(false);
+    }
+  }, [config.agentId, config.mode, open]);
+
   return (
     <div
       className="inline-switcher"
@@ -319,13 +375,23 @@ export function InlineModelSwitcher({
     >
       <button
         type="button"
-        className="inline-switcher__chip"
+        className={
+          'inline-switcher__chip' +
+          (showAmrReminder ? ' has-amr-reminder' : '')
+        }
         data-testid="inline-model-switcher-chip"
-        onClick={() => setOpen((v) => !v)}
+        onClick={handleChipClick}
         aria-haspopup="menu"
         aria-expanded={open}
         title={t('inlineSwitcher.chipTitle')}
       >
+        {showAmrReminder ? (
+          <span
+            className="inline-switcher__amr-reminder-dot inline-switcher__amr-reminder-dot--chip"
+            data-testid="inline-model-switcher-amr-reminder"
+            aria-hidden="true"
+          />
+        ) : null}
         <span className="inline-switcher__chip-icon" aria-hidden="true">
           {config.mode === 'daemon' && currentAgent ? (
             <AgentIcon id={currentAgent.id} size={18} />
@@ -427,7 +493,11 @@ export function InlineModelSwitcher({
                   >
                     {installedAgents.map((a) => {
                       const active = config.agentId === a.id;
-                      const agentName = displayAgentName(a);
+                      const agentName = displayAgentChipName(a);
+                      const showAgentReminder =
+                        a.id === 'amr' &&
+                        showAmrReminderInPopover &&
+                        config.agentId !== 'amr';
                       return (
                         <div
                           key={a.id}
@@ -444,19 +514,27 @@ export function InlineModelSwitcher({
                             }
                             className={
                               'inline-switcher__agent' +
-                              (active ? ' is-active' : '')
+                              (active ? ' is-active' : '') +
+                              (showAgentReminder ? ' has-amr-reminder' : '')
                             }
                             data-testid={`inline-model-switcher-agent-${a.id}`}
                             onClick={() => void handleAgentButtonClick(a.id)}
                             title={
                               a.id === 'amr' && amrLoginPending
                                 ? amrPendingHoverLabel
-                                : a.version
+                                : a.id !== 'amr' && a.version
                                   ? `${agentName} · ${a.version}`
                                   : agentName
                             }
                           >
                             <AgentIcon id={a.id} size={20} />
+                            {showAgentReminder ? (
+                              <span
+                                className="inline-switcher__amr-reminder-dot inline-switcher__amr-reminder-dot--agent"
+                                data-testid="inline-model-switcher-agent-amr-reminder"
+                                aria-hidden="true"
+                              />
+                            ) : null}
                             <span className="inline-switcher__agent-name">
                               {agentName}
                             </span>

@@ -19,6 +19,7 @@ import {
 interface AmrLoginPillProps {
   className?: string;
   hideSignedOutStatus?: boolean;
+  signInLabel?: string;
 }
 
 export type AmrAccountControlStatus =
@@ -37,6 +38,7 @@ export interface AmrAccountControlProps {
   showProfileBadge?: boolean;
   showSignInAction?: boolean;
   hideSignedOutStatus?: boolean;
+  signInLabel?: string;
   onSignIn?: (event: MouseEvent<HTMLButtonElement>) => void;
   onSignOut?: (event: MouseEvent<HTMLButtonElement>) => void;
   signInDisabled?: boolean;
@@ -62,6 +64,7 @@ export function AmrAccountControl({
   showProfileBadge = false,
   showSignInAction = true,
   hideSignedOutStatus = false,
+  signInLabel,
   onSignIn,
   onSignOut,
   signInDisabled = false,
@@ -114,7 +117,7 @@ export function AmrAccountControl({
           disabled={signInDisabled}
           onClick={onSignIn}
         >
-          {t('settings.amrSignIn')}
+          {signInLabel ?? t('settings.amrSignIn')}
         </button>
       ) : null}
       {badgeLabel ? (
@@ -130,15 +133,12 @@ export function AmrAccountControl({
 }
 
 // AMR-specific login pill that lives as a sibling inside the installed
-// agent card (next to the Test button). The pill polls
-// `/api/integrations/vela/status` after a Sign-in click until the daemon
-// reports loggedIn=true — vela CLI handles the device-authorization URL /
-// code / browser open itself (see apps/cli/internal/commands/login.go in
-// nexu-io/vela), so Open Design's UI only needs to kick the subprocess
-// off and surface the result.
+// agent card. The pill polls `/api/integrations/vela/status` after a Sign-in
+// click until the daemon reports loggedIn=true.
 export function AmrLoginPill({
   className,
   hideSignedOutStatus = false,
+  signInLabel,
 }: AmrLoginPillProps) {
   const { t } = useI18n();
   const [status, setStatus] = useState<VelaLoginStatus | null>(null);
@@ -316,6 +316,7 @@ export function AmrLoginPill({
         profile={status?.profile}
         showProfileBadge
         hideSignedOutStatus={hideSignedOutStatus}
+        signInLabel={signInLabel}
         signInDisabled={loginInFlight}
         signOutDisabled={logoutInFlight}
         onSignIn={handleLogin}

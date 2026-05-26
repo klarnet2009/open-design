@@ -112,8 +112,8 @@ beforeEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-describe('EntryShell onboarding AMR Cloud runtime', () => {
-  it('does not auto-select AMR Cloud when the AMR runtime is unavailable', async () => {
+describe('EntryShell onboarding Open Design AMR runtime', () => {
+  it('does not auto-select Open Design AMR when the AMR runtime is unavailable', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
     ) as typeof fetch;
@@ -122,7 +122,7 @@ describe('EntryShell onboarding AMR Cloud runtime', () => {
       onRefreshAgents: vi.fn(() => [cliAgent()]),
     });
 
-    expect(screen.queryByRole('button', { name: /AMR Cloud/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
 
     await waitFor(() => {
@@ -132,14 +132,22 @@ describe('EntryShell onboarding AMR Cloud runtime', () => {
     expect(screen.queryByText('Sign in to continue')).toBeNull();
   });
 
-  it('shows AMR Cloud as the recommended default when AMR is available', async () => {
+  it('shows Open Design AMR as the recommended default when AMR is available', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
     ) as typeof fetch;
     const props = renderOnboarding();
 
-    const amrCloud = screen.getByRole('button', { name: /AMR Cloud/i });
+    const amrCloud = screen.getByRole('button', { name: /Open Design AMR/i });
     expect(amrCloud.getAttribute('aria-pressed')).toBe('true');
+    expect(amrCloud.textContent).toContain('Officially maintained');
+    expect(amrCloud.textContent).toContain('Ready to use');
+    expect(amrCloud.textContent).toContain('Many models');
+    expect(amrCloud.textContent).toContain('Better pricing');
+    const authorizeLink = screen.getByRole('link', { name: /Authorize AMR/i });
+    expect(authorizeLink.getAttribute('href')).toBe(
+      'https://vela.powerformer.net/login?redirect=/wallet',
+    );
     await screen.findByText('Not signed in');
     expect(screen.queryByRole('button', { name: /^Sign in$/i })).toBeNull();
     await waitFor(() => {
@@ -348,7 +356,7 @@ describe('EntryShell onboarding AMR Cloud runtime', () => {
     });
   });
 
-  it('continues normally when AMR Cloud is signed in', async () => {
+  it('continues normally when Open Design AMR is signed in', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({
         loggedIn: true,
@@ -358,6 +366,10 @@ describe('EntryShell onboarding AMR Cloud runtime', () => {
       }),
     ) as typeof fetch;
     renderOnboarding();
+
+    expect(await screen.findByText('Authorized')).toBeTruthy();
+    expect(screen.getByText('user@example.com')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Authorize AMR/i })).toBeNull();
 
     const continueButton = await screen.findByRole('button', { name: /^Continue$/i });
     fireEvent.click(continueButton);

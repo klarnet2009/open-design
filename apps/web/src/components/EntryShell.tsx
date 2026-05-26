@@ -8,7 +8,14 @@
 // can be rebased without touching this file. `EntryView` becomes a
 // thin wrapper that passes data and callbacks through to this shell.
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react';
 import {
   defaultScenarioPluginIdForProjectMetadata,
   type ConnectorDetail,
@@ -107,6 +114,8 @@ import {
   AMR_LOGIN_POLL_INTERVAL_MS,
   amrLoginPollOutcome,
 } from './amrLoginPolling';
+
+const AMR_AUTH_URL = 'https://vela.powerformer.net/login?redirect=/wallet';
 
 // The topbar chips (GitHub star, model switcher, Use everywhere)
 // collapse into the settings dropdown when the viewport gets
@@ -822,6 +831,7 @@ function OnboardingView({
   const agentRevealTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const cliScanTokenRef = useRef(0);
   const amrLoginPollCancelledRef = useRef(false);
+  const amrAgentRefreshAttemptedRef = useRef(false);
   const apiProtocol = config.apiProtocol ?? 'anthropic';
   const providerTestInputKey = [
     apiProtocol,
@@ -865,6 +875,7 @@ function OnboardingView({
     (agent) => agent.available && agent.id !== 'amr' && visibleAgentIds.includes(agent.id),
   );
   const amrAgent = agents.find((agent) => agent.id === 'amr' && agent.available) ?? null;
+  const showAmrCloudOption = amrAgent !== null || agents.length === 0;
   const amrSignedIn = amrStatus?.loggedIn === true;
   const amrSelectedAndSignedOut = runtime === 'amr' && !amrSignedIn;
   const selectedAgent = visibleAgents.find((agent) => agent.id === config.agentId) ?? null;
@@ -884,6 +895,12 @@ function OnboardingView({
     onModeChange('daemon');
     onAgentChange('amr');
   }, [amrAgent, onAgentChange, onModeChange, runtime]);
+
+  useEffect(() => {
+    if (amrAgent || amrAgentRefreshAttemptedRef.current) return;
+    amrAgentRefreshAttemptedRef.current = true;
+    void Promise.resolve(onRefreshAgents()).catch(() => undefined);
+  }, [amrAgent, onRefreshAgents]);
 
   useEffect(() => {
     if (!amrAgent) return;
@@ -1272,7 +1289,7 @@ function OnboardingView({
     setStep((current) => current - 1);
   }
   function handlePrimaryAction() {
-    if (amrSelectedAndSignedOut) {
+    if (step === 0 && amrSelectedAndSignedOut) {
       void handleAmrSignInToContinue();
       return;
     }
@@ -1524,11 +1541,18 @@ function OnboardingView({
     }
   }
 
-  const primaryActionLabel = amrSelectedAndSignedOut
+  const primaryActionLabel = step === 0 && amrSelectedAndSignedOut
     ? t('settings.amrSignInToContinue')
+    : step === 1
+      ? t('settings.onboardingContinue')
     : isLastStep
       ? t('settings.onboardingFinish')
       : t('settings.onboardingContinue');
+  const primaryActionIcon = step === 1
+    ? null
+    : isLastStep
+      ? 'check'
+      : 'chevron-right';
 
   return (
     <section className="onboarding-view" aria-labelledby="onboarding-title">
@@ -1558,13 +1582,50 @@ function OnboardingView({
                 body={t('settings.onboardingConnectBody')}
               />
               <div className="onboarding-view__runtime-stack">
-                {amrAgent ? (
+                {showAmrCloudOption ? (
                   <div className="onboarding-view__amr-cloud-card">
                     <OnboardingChoiceCard
                       icon="orbit"
                       title={t('settings.amrCloud')}
                       body={t('settings.onboardingExecutionBody')}
+                      benefits={[
+                        t('settings.onboardingAmrCloudBenefitOfficial'),
+                        t('settings.onboardingAmrCloudBenefitReady'),
+                        t('settings.onboardingAmrCloudBenefitModels'),
+                        t('settings.onboardingAmrCloudBenefitPricing'),
+                      ]}
                       badge={t('settings.onboardingRecommended')}
+                      officialLabel={t('settings.onboardingAmrCloudOfficialBadge')}
+                      authAction={{
+                        label: amrSignedIn
+                          ? t('settings.onboardingAmrCloudAuthorizedAction')
+                          : t('settings.onboardingAmrCloudAuthorizeAction'),
+                        href: AMR_AUTH_URL,
+                        authorized: amrSignedIn,
+                      }}
+                      statusSlot={
+                        runtime === 'amr' ? (
+                          <AmrAccountControl
+                            status={
+                              amrLoginError
+                                ? 'error'
+                                : amrSignedIn
+                                  ? 'signed-in'
+                                  : amrLoginPending
+                                    ? 'signing-in'
+                                    : 'signed-out'
+                            }
+                            compact
+                            email={
+                              amrSignedIn
+                                ? amrStatus?.user?.email || t('settings.amrSignedIn')
+                                : ''
+                            }
+                            showSignInAction={false}
+                            signInDisabled={amrLoginPending}
+                          />
+                        ) : null
+                      }
                       featured
                       selected={runtime === 'amr'}
                       onClick={() => {
@@ -1573,23 +1634,6 @@ function OnboardingView({
                         onAgentChange('amr');
                       }}
                     />
-                    {runtime === 'amr' ? (
-                      <AmrAccountControl
-                        status={
-                          amrLoginError
-                            ? 'error'
-                            : amrSignedIn
-                            ? 'signed-in'
-                            : amrLoginPending
-                              ? 'signing-in'
-                              : 'signed-out'
-                        }
-                        compact
-                        email={amrStatus?.user?.email ?? ''}
-                        showSignInAction={false}
-                        signInDisabled={amrLoginPending}
-                      />
-                    ) : null}
                   </div>
                 ) : null}
                 <div className="onboarding-view__alternatives">
@@ -1863,7 +1907,7 @@ function OnboardingView({
                 disabled={amrLoginPending}
               >
                 <span>{primaryActionLabel}</span>
-                <Icon name={isLastStep ? 'check' : 'chevron-right'} size={16} />
+                {primaryActionIcon ? <Icon name={primaryActionIcon} size={16} /> : null}
               </button>
             </div>
           )}
@@ -2395,30 +2439,52 @@ function OnboardingChoiceCard({
   icon,
   title,
   body,
+  benefits,
   actionLabel,
   selected,
   badge,
+  officialLabel,
+  authAction,
+  statusSlot,
   featured,
   onClick,
 }: {
   icon: 'orbit' | 'hammer' | 'sliders' | 'github' | 'upload' | 'sparkles';
   title: string;
   body: string;
+  benefits?: string[];
   actionLabel?: string;
   selected: boolean;
   badge?: string;
+  officialLabel?: string;
+  authAction?: { label: string; href: string; authorized?: boolean };
+  statusSlot?: ReactNode;
   featured?: boolean;
   onClick: () => void;
 }) {
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    onClick();
+  }
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       className={`onboarding-view__card${selected ? ' is-selected' : ''}${
         featured ? ' onboarding-view__card--featured' : ''
-      }`}
+      }${officialLabel ? ' onboarding-view__card--official' : ''}`}
       onClick={onClick}
+      onKeyDown={handleKeyDown}
       aria-pressed={selected}
     >
+      {officialLabel ? (
+        <span className="onboarding-view__official-tag">
+          <img src="/official_badge.svg" alt={officialLabel} draggable={false} />
+        </span>
+      ) : null}
       <span className="onboarding-view__icon">
         <Icon name={icon} size={18} />
       </span>
@@ -2427,14 +2493,50 @@ function OnboardingChoiceCard({
           <strong>{title}</strong>
           {badge ? <span className="onboarding-view__badge">{badge}</span> : null}
         </span>
-        <small>{body}</small>
+        {benefits && benefits.length > 0 ? (
+          <span className="onboarding-view__benefits">
+            {benefits.map((item) => (
+              <span key={item} className="onboarding-view__benefit">
+                {item}
+              </span>
+            ))}
+          </span>
+        ) : (
+          <small>{body}</small>
+        )}
       </span>
+      {authAction ? (
+        <span className="onboarding-view__auth-area">
+          {authAction.authorized ? (
+            <span
+              className="onboarding-view__auth-link is-authorized"
+              aria-label={authAction.label}
+            >
+              <span>{authAction.label}</span>
+            </span>
+          ) : (
+            <a
+              className="onboarding-view__auth-link"
+              href={authAction.href}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              <span>{authAction.label}</span>
+            </a>
+          )}
+        </span>
+      ) : null}
+      {statusSlot ? (
+        <span className="onboarding-view__card-status">
+          {statusSlot}
+        </span>
+      ) : null}
       {actionLabel ? <span className="onboarding-view__card-action">{actionLabel}</span> : null}
       {selected ? (
         <span className="onboarding-view__check">
           <Icon name="check" size={14} />
         </span>
       ) : null}
-    </button>
+    </div>
   );
 }
