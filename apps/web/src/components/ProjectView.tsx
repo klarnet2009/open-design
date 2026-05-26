@@ -2900,6 +2900,8 @@ export function ProjectView({
   const handleSendBoardCommentAttachments = useCallback(
     async (commentAttachments: ChatCommentAttachment[]) => {
       if (currentConversationActionDisabled || commentAttachments.length === 0) return;
+      setWorkspaceFocused(false);
+      setCommentInspectorActive(false);
       await handleSend('', [], commentAttachments);
     },
     [handleSend, currentConversationActionDisabled],

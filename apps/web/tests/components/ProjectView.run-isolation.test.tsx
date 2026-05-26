@@ -108,12 +108,30 @@ vi.mock('../../src/components/FileWorkspace', () => ({
   FileWorkspace: ({
     streaming,
     onSendBoardCommentAttachments,
+    onCommentModeChange,
+    onFocusModeChange,
   }: {
     streaming: boolean;
     onSendBoardCommentAttachments: (attachments: unknown[]) => void;
+    onCommentModeChange?: (active: boolean) => void;
+    onFocusModeChange?: (focused: boolean) => void;
   }) => (
     <>
       <output data-testid="workspace-streaming-state">{streaming ? 'streaming' : 'idle'}</output>
+      <button
+        type="button"
+        data-testid="workspace-open-comments"
+        onClick={() => onCommentModeChange?.(true)}
+      >
+        open comments
+      </button>
+      <button
+        type="button"
+        data-testid="workspace-focus-mode"
+        onClick={() => onFocusModeChange?.(true)}
+      >
+        focus workspace
+      </button>
       <button
         type="button"
         data-testid="workspace-send-comment"
@@ -472,6 +490,31 @@ describe('ProjectView conversation run isolation', () => {
 
     expect(streamViaDaemon).not.toHaveBeenCalled();
     expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
+  it('returns to chat after sending board comments from the comment surface', async () => {
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    fireEvent.click(screen.getByTestId('conversation-select-conv-b'));
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-b'));
+    if (!resolveConversationBMessages) throw new Error('Expected conv-b message load to be pending');
+    resolveConversationBMessages([]);
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('workspace-focus-mode'));
+    await waitFor(() =>
+      expect(screen.getByTestId('active-conversation').closest('.split-chat-slot')?.hasAttribute('hidden')).toBe(true),
+    );
+    fireEvent.click(screen.getByTestId('workspace-open-comments'));
+    fireEvent.click(screen.getByTestId('workspace-send-comment'));
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-b'));
+    expect(screen.getByTestId('active-conversation').closest('.split-chat-slot')?.hasAttribute('hidden')).toBe(false);
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: 'conv-b',
+      projectId: 'project-1',
+    }));
   });
 
   it('detaches saved comment attachments after queueing them for a busy conversation', async () => {

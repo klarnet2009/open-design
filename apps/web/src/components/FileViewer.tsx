@@ -3834,6 +3834,7 @@ function HtmlViewer({
   const [drawOverlayOpen, setDrawOverlayOpen] = useState(false);
   const [drawOverlayMode, setDrawOverlayMode] = useState<PreviewDrawMode>('click');
   const [drawOverlayIntent, setDrawOverlayIntent] = useState<'draw' | 'screenshot'>('draw');
+  const [screenshotToast, setScreenshotToast] = useState(false);
   // for hint managing hint box state
   const [openHintBox, setOpenHintBox] = useState(true);
   const [manualEditMode, setManualEditModeRaw] = useState(false);
@@ -5698,22 +5699,16 @@ function HtmlViewer({
 
   function activateScreenshotTool() {
     fireArtifactToolbarClick('draw');
-    const next = !(drawOverlayOpen && drawOverlayIntent === 'screenshot');
-    if (!next) {
-      setDrawOverlayOpen(false);
-      setAgentToolsOpen(false);
-      return;
-    }
     const activateScreenshot = () => {
       setCommentPanelOpen(false);
       setCommentCreateMode(false);
       setBoardMode(false);
       clearBoardComposer();
       setInspectMode(false);
-      setDrawOverlayIntent('screenshot');
-      setDrawOverlayMode('click');
+      setDrawOverlayIntent('draw');
       setMode('preview');
-      setDrawOverlayOpen(true);
+      setDrawOverlayOpen(false);
+      setScreenshotToast(true);
       closeArtifactToolMenus();
     };
     if (manualEditMode) {
@@ -5887,6 +5882,12 @@ function HtmlViewer({
       setSendingBoardBatch(false);
     }
   }
+
+  useEffect(() => {
+    if (!screenshotToast) return;
+    const id = window.setTimeout(() => setScreenshotToast(false), 2200);
+    return () => window.clearTimeout(id);
+  }, [screenshotToast]);
 
   const showPresent = source !== null;
   const canShare = source !== null;
@@ -6294,13 +6295,13 @@ function HtmlViewer({
                 <RemixIcon name="mark-pen-line" size={15} />
               </button>
               <button
-                className={`viewer-action viewer-action-icon${drawOverlayOpen && drawOverlayIntent === 'screenshot' ? ' active' : ''}`}
+                className={`viewer-action viewer-action-icon${screenshotToast ? ' active' : ''}`}
                 type="button"
                 data-testid="screenshot-capture-toggle"
                 data-tooltip="Screenshot"
                 title="Screenshot"
                 aria-label="Screenshot"
-                aria-pressed={drawOverlayOpen && drawOverlayIntent === 'screenshot'}
+                aria-pressed={screenshotToast}
                 onClick={activateScreenshotTool}
               >
                 <RemixIcon name="screenshot-2-line" size={15} />
@@ -6865,6 +6866,21 @@ function HtmlViewer({
                   ttlMs={2200}
                   onDismiss={() => setTemplateSavedToast(null)}
                 />
+              </div>
+            ) : null}
+            {screenshotToast ? (
+              <div className="screenshot-toast-anchor">
+                <div className="screenshot-toast" role="status" aria-live="polite">
+                  <RemixIcon name="checkbox-circle-line" size={16} />
+                  <span>截图已保存到剪贴板</span>
+                  <button
+                    type="button"
+                    aria-label={t('common.close')}
+                    onClick={() => setScreenshotToast(false)}
+                  >
+                    <RemixIcon name="close-line" size={16} />
+                  </button>
+                </div>
               </div>
             ) : null}
             {commentComposer}

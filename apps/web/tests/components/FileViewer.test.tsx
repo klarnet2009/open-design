@@ -1451,8 +1451,8 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByPlaceholderText('Type anywhere to add a note')).toBeNull();
 
     fireEvent.click(screen.getByTestId('screenshot-capture-toggle'));
-    expect(screen.getByPlaceholderText('Type anywhere to add a note')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Click' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.queryByPlaceholderText('Type anywhere to add a note')).toBeNull();
+    expect(screen.getByRole('status').textContent).toContain('截图已保存到剪贴板');
     expect(screen.getByTestId('screenshot-capture-toggle').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByTestId('draw-overlay-toggle').getAttribute('aria-pressed')).toBe('false');
   });
