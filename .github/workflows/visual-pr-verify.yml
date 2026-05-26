@@ -20,9 +20,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
-        with:
-          fetch-depth: 0
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --no-tags --prune origin "$BASE_SHA" "$HEAD_SHA"
+          git checkout --force "$HEAD_SHA"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Detect visual-relevant changes
         id: changes

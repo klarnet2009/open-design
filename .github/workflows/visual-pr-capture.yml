@@ -32,9 +32,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
-        with:
-          fetch-depth: 0
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --no-tags --prune --depth=1 origin "$HEAD_SHA"
+          git checkout --force FETCH_HEAD
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Prepare visual screenshot environment
         uses: ./.github/actions/visual-screenshot

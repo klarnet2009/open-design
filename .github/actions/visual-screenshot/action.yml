@@ -5,9 +5,11 @@ runs:
   using: composite
   steps:
     - name: Setup pnpm
-      uses: pnpm/action-setup@v6.0.8
-      with:
-        version: 10.33.2
+      shell: bash
+      run: |
+        set -euo pipefail
+        corepack enable
+        corepack prepare pnpm@10.33.2 --activate
 
     - name: Setup Node.js
       uses: actions/setup-node@v6.4.0

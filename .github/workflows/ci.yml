@@ -42,8 +42,6 @@ jobs:
     steps:
       - name: Detect workspace and app test scopes
         id: detect
-        env:
-          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -54,9 +52,20 @@ jobs:
           nix_validation_required=false
           workspace_validation_required=false
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            gh api --paginate \
-              "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
-              --jq '.[].filename' > "$RUNNER_TEMP/changed-files.txt"
+            : > "$RUNNER_TEMP/changed-files.txt"
+            page=1
+            while :; do
+              response="$(
+                curl --fail --silent --show-error \
+                  --url "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100&page=$page"
+              )"
+              echo "$response" | jq -r '.[].filename' >> "$RUNNER_TEMP/changed-files.txt"
+              count="$(echo "$response" | jq 'length')"
+              if [ "$count" -lt 100 ]; then
+                break
+              fi
+              page="$((page + 1))"
+            done
             while IFS= read -r file; do
               if [[ "$file" == "apps/daemon/"* || "$file" == "packages/contracts/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
                 daemon_tests_required=true
@@ -142,14 +151,26 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        env:
+          REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --no-tags --prune --depth=1 origin "$REF"
+          git checkout --force FETCH_HEAD
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v27
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-            accept-flake-config = true
+        run: |
+          set -euo pipefail
+          curl --fail --location https://nixos.org/nix/install | sh -s -- --no-daemon
+          mkdir -p "$HOME/.config/nix"
+          {
+            echo "experimental-features = nix-command flakes"
+            echo "accept-flake-config = true"
+          } >> "$HOME/.config/nix/nix.conf"
+          echo "$HOME/.nix-profile/bin" >> "$GITHUB_PATH"
 
       - name: nix flake check
         run: nix flake check --print-build-logs --keep-going
@@ -163,7 +184,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        env:
+          REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --no-tags --prune --depth=1 origin "$REF"
+          git checkout --force FETCH_HEAD
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
@@ -209,7 +238,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        env:
+          REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --no-tags --prune --depth=1 origin "$REF"
+          git checkout --force FETCH_HEAD
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
@@ -237,7 +274,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        env:
+          REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --no-tags --prune --depth=1 origin "$REF"
+          git checkout --force FETCH_HEAD
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
@@ -257,7 +302,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        env:
+          REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --no-tags --prune --depth=1 origin "$REF"
+          git checkout --force FETCH_HEAD
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
@@ -278,7 +331,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        env:
+          REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --no-tags --prune --depth=1 origin "$REF"
+          git checkout --force FETCH_HEAD
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
@@ -312,7 +373,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        env:
+          REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --no-tags --prune --depth=1 origin "$REF"
+          git checkout --force FETCH_HEAD
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace

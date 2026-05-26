@@ -15,9 +15,11 @@ runs:
   using: composite
   steps:
     - name: Setup pnpm
-      uses: pnpm/action-setup@v6.0.8
-      with:
-        version: ${{ inputs.pnpm-version }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        corepack enable
+        corepack prepare "pnpm@${{ inputs.pnpm-version }}" --activate
 
     - name: Setup Node.js
       uses: actions/setup-node@v6.4.0
