@@ -4,6 +4,7 @@ import {
   type LandingLocaleCode,
   type LocalizedStringValue,
 } from './i18n';
+import { getPluginsCopy } from './_lib/plugins-i18n';
 
 type ContentCopy = {
   skillNoun: string;
@@ -626,12 +627,25 @@ export function localizeTaxonomyValue(
   locale: LandingLocaleCode,
 ): string | undefined {
   if (!value) return undefined;
-  if (locale === DEFAULT_LOCALE) return value;
   const key = normalizeTerm(value);
+  // Plugins-i18n's 23-key `subcategory` map covers scene-level slugs like
+  // `business-dashboards` and `social-short-form` — values that originate
+  // from `od.scenario` on bundled plugins and never appear in TAXONOMY_TERMS
+  // or CATEGORY_LABELS. Consulting it here gives English a friendly label
+  // ("Dashboards") instead of the raw kebab key, and lets every chip
+  // consumer pick up scene-level translations on non-English locales.
+  const subcategoryLabel = getPluginsCopy(locale).subcategory[key];
+  if (locale === DEFAULT_LOCALE) return subcategoryLabel ?? value;
+  // Return undefined when no real translation is found, so chip-rail
+  // consumers can drop the chip entirely rather than render a noisy
+  // "Category" / "分類" placeholder for every taxonomy slug we have not
+  // localized yet (`design-system`, `planning`, `code-migration`, etc.).
+  // Callers that genuinely want the unknownTag placeholder should use
+  // `localizeContentTag` instead, which keeps the explicit fallback.
   return (
     TAXONOMY_TERMS[key]?.[locale] ??
     CATEGORY_LABELS[key]?.[locale] ??
-    copyFor(locale)?.unknownTag
+    subcategoryLabel
   );
 }
 
