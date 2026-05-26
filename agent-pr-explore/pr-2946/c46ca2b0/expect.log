@@ -1,0 +1,16 @@
+verdict: pass
+
+cases tested:
+- Ran the Docker-isolated web static export verifier for PR #2946.
+- Verified the PR app can still boot and is reachable at http://127.0.0.1:22946.
+
+concrete observations:
+- The diff changes Vercel/static-export behavior rather than an interactive browser flow.
+- The verifier ran inside the PR checkout with the inherited server-mode hazard reproduced:
+  `rm -rf apps/web/out apps/web/.next && OD_WEB_OUTPUT_MODE=server sh -c 'OD_WEB_OUTPUT_MODE= pnpm --filter @open-design/web build && test -d apps/web/out'`
+- The command exited 0 and `apps/web/out/index.html` exists.
+- Browser exploration was skipped because the changed behavior is build/deploy output, not a UI interaction.
+
+missing deterministic e2e coverage worth sedimenting:
+- Keep or extend `apps/web/tests/runtime/app-route-export.test.ts` for config-level coverage.
+- Consider a dedicated CI smoke for the Vercel command if this deployment path regresses again.

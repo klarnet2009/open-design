@@ -1,0 +1,12 @@
+{
+  "fixture": "none",
+  "targetUrl": "http://127.0.0.1:22946",
+  "kind": "post-run-smoke-recording",
+  "hud": true,
+  "ok": true,
+  "video": "playwright-smoke-session.webm",
+  "trace": "playwright-smoke-trace.zip",
+  "legacyTrace": "playwright-trace.zip",
+  "traceViewerUrl": null,
+  "legacyVideo": "playwright-session.webm"
+}
