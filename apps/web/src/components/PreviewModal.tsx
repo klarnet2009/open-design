@@ -78,7 +78,7 @@ export interface PreviewPrimaryAction {
 export interface PreviewShareTarget {
   title?: string;
   description?: string;
-  url?: string;
+  url?: string | null;
 }
 
 type SocialSharePlatform =
@@ -370,8 +370,10 @@ export function PreviewModal({
   const fallbackShareUrl = canExportFiles && typeof window !== 'undefined'
     ? window.location.href
     : '';
+  const hasExplicitShareUrl = shareTarget && 'url' in shareTarget;
+  const explicitShareUrl = typeof shareTarget?.url === 'string' ? shareTarget.url : '';
   const previewShareTitle = shareTarget?.title || exportTitle || title;
-  const previewShareUrl = shareTarget?.url || fallbackShareUrl;
+  const previewShareUrl = hasExplicitShareUrl ? explicitShareUrl : fallbackShareUrl;
   const previewShareText = t('preview.shareTextDefault', { title: previewShareTitle });
   const previewShareCopy = previewShareUrl
     ? `${previewShareText}\n${previewShareUrl}`
@@ -571,115 +573,118 @@ export function PreviewModal({
                           <span>{previewShareUrlDisplay}</span>
                         ) : null}
                       </div>
-                      <section className="template-share-section">
-                        <div className="template-share-section__label">
-                          {t('preview.shareSocialGroup')}
-                        </div>
-                        <div className="template-share-platform-grid">
-                          {socialShareTargets.map((item) => (
-                            <a
-                              key={item.platform}
-                              className={`template-share-platform template-share-platform--${item.platform}`}
-                              role="menuitem"
-                              href={item.href || undefined}
-                              target={item.href ? '_blank' : undefined}
-                              rel={item.href ? 'noreferrer noopener' : undefined}
-                              aria-disabled={item.href ? undefined : 'true'}
-                              tabIndex={item.href ? undefined : -1}
-                              onClick={(event) => {
-                                if (!item.href) {
-                                  event.preventDefault();
-                                  return;
-                                }
-                                if (item.mode === 'copy-open') {
-                                  event.preventDefault();
-                                  const shareWindow = window.open('about:blank', '_blank');
-                                  const feedbackKey = `social-${item.platform}`;
-                                  void copyPreviewShare(previewShareCopy, feedbackKey).then((ok) => {
-                                    if (!ok || !item.href) {
-                                      shareWindow?.close();
+                      {previewShareUrl ? (
+                        <>
+                          <section className="template-share-section">
+                            <div className="template-share-section__label">
+                              {t('preview.shareSocialGroup')}
+                            </div>
+                            <div className="template-share-platform-grid">
+                              {socialShareTargets.map((item) => (
+                                <a
+                                  key={item.platform}
+                                  className={`template-share-platform template-share-platform--${item.platform}`}
+                                  role="menuitem"
+                                  href={item.href || undefined}
+                                  target={item.href ? '_blank' : undefined}
+                                  rel={item.href ? 'noreferrer noopener' : undefined}
+                                  aria-disabled={item.href ? undefined : 'true'}
+                                  tabIndex={item.href ? undefined : -1}
+                                  onClick={(event) => {
+                                    if (!item.href) {
+                                      event.preventDefault();
+                                      return;
+                                    }
+                                    if (item.mode === 'copy-open') {
+                                      event.preventDefault();
+                                      const shareWindow = window.open('about:blank', '_blank');
+                                      const feedbackKey = `social-${item.platform}`;
+                                      void copyPreviewShare(previewShareCopy, feedbackKey).then((ok) => {
+                                        if (!ok || !item.href) {
+                                          shareWindow?.close();
+                                          return;
+                                        }
+                                        setTemplateShareOpen(false);
+                                        openShareDestination(item.href, shareWindow);
+                                      });
                                       return;
                                     }
                                     setTemplateShareOpen(false);
-                                    openShareDestination(item.href, shareWindow);
-                                  });
-                                  return;
-                                }
-                                setTemplateShareOpen(false);
-                              }}
+                                  }}
+                                >
+                                  <span className="template-share-platform__mark">
+                                    {item.mark}
+                                  </span>
+                                  <span>
+                                    {copyShareFeedback?.key === `social-${item.platform}`
+                                      ? copyShareFeedback.ok
+                                        ? t('preview.shareCopied')
+                                        : t('preview.shareCopyFailed')
+                                      : t(item.labelKey)}
+                                  </span>
+                                </a>
+                              ))}
+                            </div>
+                          </section>
+                          <section className="template-share-section">
+                            <div className="template-share-section__label">
+                              {t('preview.shareCopyGroup')}
+                            </div>
+                            <button
+                              type="button"
+                              className="share-menu-item"
+                              role="menuitem"
+                              onClick={() => copyPreviewShare(previewShareUrl, 'link')}
                             >
-                              <span className="template-share-platform__mark">
-                                {item.mark}
+                              <span className="share-menu-icon">
+                                <Icon
+                                  name={
+                                    copyShareFeedback?.key === 'link'
+                                      ? copyShareFeedback.ok
+                                        ? 'check'
+                                        : 'close'
+                                      : 'link'
+                                  }
+                                  size={14}
+                                />
                               </span>
                               <span>
-                                {copyShareFeedback?.key === `social-${item.platform}`
+                                {copyShareFeedback?.key === 'link'
                                   ? copyShareFeedback.ok
                                     ? t('preview.shareCopied')
                                     : t('preview.shareCopyFailed')
-                                  : t(item.labelKey)}
+                                  : t('preview.copyTemplateLink')}
                               </span>
-                            </a>
-                          ))}
-                        </div>
-                      </section>
-                      <section className="template-share-section">
-                        <div className="template-share-section__label">
-                          {t('preview.shareCopyGroup')}
-                        </div>
-                        <button
-                          type="button"
-                          className="share-menu-item"
-                          role="menuitem"
-                          onClick={() => copyPreviewShare(previewShareUrl, 'link')}
-                          disabled={!previewShareUrl}
-                        >
-                          <span className="share-menu-icon">
-                            <Icon
-                              name={
-                                copyShareFeedback?.key === 'link'
+                            </button>
+                            <button
+                              type="button"
+                              className="share-menu-item"
+                              role="menuitem"
+                              onClick={() => copyPreviewShare(previewShareCopy, 'text')}
+                            >
+                              <span className="share-menu-icon">
+                                <Icon
+                                  name={
+                                    copyShareFeedback?.key === 'text'
+                                      ? copyShareFeedback.ok
+                                        ? 'check'
+                                        : 'close'
+                                      : 'copy'
+                                  }
+                                  size={14}
+                                />
+                              </span>
+                              <span>
+                                {copyShareFeedback?.key === 'text'
                                   ? copyShareFeedback.ok
-                                    ? 'check'
-                                    : 'close'
-                                  : 'link'
-                              }
-                              size={14}
-                            />
-                          </span>
-                          <span>
-                            {copyShareFeedback?.key === 'link'
-                              ? copyShareFeedback.ok
-                                ? t('preview.shareCopied')
-                                : t('preview.shareCopyFailed')
-                              : t('preview.copyTemplateLink')}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          className="share-menu-item"
-                          role="menuitem"
-                          onClick={() => copyPreviewShare(previewShareCopy, 'text')}
-                        >
-                          <span className="share-menu-icon">
-                            <Icon
-                              name={
-                                copyShareFeedback?.key === 'text'
-                                  ? copyShareFeedback.ok
-                                    ? 'check'
-                                    : 'close'
-                                  : 'copy'
-                              }
-                              size={14}
-                            />
-                          </span>
-                          <span>
-                            {copyShareFeedback?.key === 'text'
-                              ? copyShareFeedback.ok
-                                ? t('preview.shareCopied')
-                                : t('preview.shareCopyFailed')
-                              : t('preview.copyShareText')}
-                          </span>
-                        </button>
-                      </section>
+                                    ? t('preview.shareCopied')
+                                    : t('preview.shareCopyFailed')
+                                  : t('preview.copyShareText')}
+                              </span>
+                            </button>
+                          </section>
+                        </>
+                      ) : null}
                       {canExportFiles ? (
                         <section className="template-share-section">
                           <div className="template-share-section__label">

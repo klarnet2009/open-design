@@ -314,7 +314,7 @@ describe('PreviewModal unavailable state', () => {
         ]}
         shareTarget={{
           title: 'Media Template',
-          url: 'https://open-design.ai/plugins/templates/media-template',
+          url: 'https://open-design.ai/plugins/media-template',
         }}
         onView={() => {}}
         onClose={() => {}}
@@ -330,6 +330,35 @@ describe('PreviewModal unavailable state', () => {
     expect(screen.queryByRole('menuitem', { name: /Export as PDF/i })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: /Download as \.zip/i })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: /Export as standalone HTML/i })).toBeNull();
+  });
+
+  it('hides social and copy-link actions when an explicit public share URL is unavailable', () => {
+    render(
+      <PreviewModal
+        {...baseProps}
+        views={[
+          {
+            id: 'preview',
+            label: 'Preview',
+            html: '<!doctype html><p>Local-only preview</p>',
+          },
+        ]}
+        shareTarget={{
+          title: 'Local Template',
+          url: null,
+        }}
+        onView={() => {}}
+        onClose={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+
+    expect(screen.queryByRole('menuitem', { name: /X \/ Twitter/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Copy template link/i })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: /Export as PDF/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Download as \.zip/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Export as standalone HTML/i })).toBeTruthy();
   });
 
   it('does not call onView for an unavailable view (no fetch to retry)', () => {

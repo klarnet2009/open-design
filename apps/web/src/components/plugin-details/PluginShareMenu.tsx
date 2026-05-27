@@ -74,7 +74,13 @@ function buildInstallCommand(record: InstalledPluginRecord): string {
   return `od plugin install ${record.source}`;
 }
 
-export function buildPluginShareUrl(record: InstalledPluginRecord): string {
+export function buildPluginShareUrl(record: InstalledPluginRecord): string | null {
+  if (
+    typeof record.sourceMarketplaceEntryName !== 'string' ||
+    record.sourceMarketplaceEntryName.trim().length === 0
+  ) {
+    return null;
+  }
   // Share surfaces must produce recipient-openable links, not local
   // tools-dev origins such as 127.0.0.1:<port>.
   return `${PUBLIC_PLUGIN_MARKETPLACE_URL}/${encodeURIComponent(record.id)}`;
@@ -84,8 +90,7 @@ function buildPluginMarketplacePath(record: InstalledPluginRecord): string {
   return `/marketplace/${encodeURIComponent(record.id)}`;
 }
 
-function buildMarkdownBadge(record: InstalledPluginRecord): string {
-  const url = buildPluginShareUrl(record);
+function buildMarkdownBadge(record: InstalledPluginRecord, url: string): string {
   return `[![${record.title} — Open Design plugin](https://img.shields.io/badge/Open%20Design-${encodeURIComponent(record.title)}-d65a31?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2C)](${url})`;
 }
 
@@ -99,6 +104,7 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const links = derivePluginSourceLinks(record);
+  const publicShareUrl = buildPluginShareUrl(record);
 
   useEffect(() => {
     if (!open) return;
@@ -143,14 +149,19 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
       copies: true,
       onSelect: () => copyPluginShareText(record.id, 'id'),
     },
-    {
+  ];
+  if (publicShareUrl) {
+    items.push({
       key: 'badge',
       label: t('plugins.actions.copyReadmeBadge'),
       icon: 'copy',
       copies: true,
-      onSelect: () => copyPluginShareText(buildMarkdownBadge(record), 'badge'),
-    },
-  ];
+      onSelect: () => copyPluginShareText(
+        buildMarkdownBadge(record, publicShareUrl),
+        'badge',
+      ),
+    });
+  }
 
   // Open-in-tab actions are real anchors so users can right-click,
   // copy the link address, or open in a new tab from browser chrome.

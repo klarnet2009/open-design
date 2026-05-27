@@ -11,7 +11,10 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 
-import { PluginShareMenu } from '../../src/components/plugin-details/PluginShareMenu';
+import {
+  buildPluginShareUrl,
+  PluginShareMenu,
+} from '../../src/components/plugin-details/PluginShareMenu';
 import { I18nProvider, type Locale } from '../../src/i18n';
 
 interface MakeArgs {
@@ -166,7 +169,11 @@ describe('PluginShareMenu', () => {
   });
 
   it('copies a README badge that links back to the marketplace detail page', async () => {
-    renderMenu(make({ id: 'badge-plugin', title: 'Badge Plugin' }));
+    renderMenu(make({
+      id: 'badge-plugin',
+      title: 'Badge Plugin',
+      marketplaceEntryName: 'open-design/badge-plugin',
+    }));
     openPopover();
     clickItem('Copy README badge');
     await Promise.resolve();
@@ -176,12 +183,29 @@ describe('PluginShareMenu', () => {
     ))).toBe(true);
   });
 
+  it('does not expose public share artifacts for local-only plugins', () => {
+    const localOnly = make({
+      id: 'local-plugin',
+      sourceKind: 'local',
+      source: '/tmp/local-plugin',
+    });
+    expect(buildPluginShareUrl(localOnly)).toBeNull();
+
+    renderMenu(localOnly);
+    openPopover();
+    const labels = Array.from(
+      container.querySelectorAll('.plugin-share-item'),
+    ).map((item) => item.textContent ?? '');
+    expect(labels.some((label) => label.includes('Copy README badge'))).toBe(false);
+  });
+
   it('localizes the plugin action menu labels', () => {
     renderMenu(
       make({
         id: 'zh-plugin',
         sourceKind: 'github',
         source: 'github:owner/repo',
+        marketplaceEntryName: 'open-design/zh-plugin',
         homepage: 'https://example.test/plugin-home',
       }),
       'zh-CN',
