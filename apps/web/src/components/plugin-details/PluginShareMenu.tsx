@@ -23,6 +23,7 @@ import { copyToClipboard } from '../../lib/copy-to-clipboard';
 import { derivePluginSourceLinks } from '../../runtime/plugin-source';
 
 const PUBLIC_PLUGIN_MARKETPLACE_URL = 'https://open-design.ai/plugins';
+const PUBLIC_OPEN_DESIGN_MARKETPLACE_ID = 'official';
 
 interface Props {
   record: InstalledPluginRecord;
@@ -76,6 +77,7 @@ function buildInstallCommand(record: InstalledPluginRecord): string {
 
 export function buildPluginShareUrl(record: InstalledPluginRecord): string | null {
   if (
+    record.sourceMarketplaceId !== PUBLIC_OPEN_DESIGN_MARKETPLACE_ID ||
     typeof record.sourceMarketplaceEntryName !== 'string' ||
     record.sourceMarketplaceEntryName.trim().length === 0
   ) {

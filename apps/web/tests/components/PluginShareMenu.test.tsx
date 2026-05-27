@@ -172,6 +172,7 @@ describe('PluginShareMenu', () => {
     renderMenu(make({
       id: 'badge-plugin',
       title: 'Badge Plugin',
+      marketplaceId: 'official',
       marketplaceEntryName: 'open-design/badge-plugin',
     }));
     openPopover();
@@ -199,12 +200,31 @@ describe('PluginShareMenu', () => {
     expect(labels.some((label) => label.includes('Copy README badge'))).toBe(false);
   });
 
+  it('does not expose public share artifacts for private marketplace plugins', () => {
+    const privateMarketplace = make({
+      id: 'private-plugin',
+      sourceKind: 'marketplace',
+      source: 'private/private-plugin',
+      marketplaceId: 'private',
+      marketplaceEntryName: 'private/private-plugin',
+    });
+    expect(buildPluginShareUrl(privateMarketplace)).toBeNull();
+
+    renderMenu(privateMarketplace);
+    openPopover();
+    const labels = Array.from(
+      container.querySelectorAll('.plugin-share-item'),
+    ).map((item) => item.textContent ?? '');
+    expect(labels.some((label) => label.includes('Copy README badge'))).toBe(false);
+  });
+
   it('localizes the plugin action menu labels', () => {
     renderMenu(
       make({
         id: 'zh-plugin',
         sourceKind: 'github',
         source: 'github:owner/repo',
+        marketplaceId: 'official',
         marketplaceEntryName: 'open-design/zh-plugin',
         homepage: 'https://example.test/plugin-home',
       }),
