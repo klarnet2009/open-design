@@ -1,5 +1,4 @@
 import type { AppConfigPrefs } from '@open-design/contracts';
-import { OPEN_DESIGN_SITE_ORIGIN } from '@open-design/contracts';
 import { MEDIA_PROVIDERS } from '../media/models';
 import { isOpenAICompatible } from '../providers/openai-compatible';
 import type {
@@ -765,25 +764,11 @@ export async function syncMediaProvidersToDaemon(
   }
 }
 
-// Runtime public site origin for shareable plugin links, seeded from the
-// daemon's /api/app-config response (the daemon reads OD_SITE_ORIGIN,
-// defaulting to the canonical public site). Components read it through
-// getRuntimeSiteOrigin(); before the daemon answers we fall back to the
-// canonical origin so a shared link is correct even on the first render.
-let runtimeSiteOrigin: string = OPEN_DESIGN_SITE_ORIGIN;
-
-export function getRuntimeSiteOrigin(): string {
-  return runtimeSiteOrigin;
-}
-
 export async function fetchDaemonConfig(): Promise<AppConfigPrefs | null> {
   try {
     const res = await fetch('/api/app-config');
     if (!res.ok) return null;
     const data = await res.json();
-    if (typeof data?.siteOrigin === 'string' && data.siteOrigin.trim()) {
-      runtimeSiteOrigin = data.siteOrigin.trim();
-    }
     return data?.config ?? null;
   } catch {
     return null;
