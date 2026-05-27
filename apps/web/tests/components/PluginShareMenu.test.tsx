@@ -172,7 +172,7 @@ describe('PluginShareMenu', () => {
     await Promise.resolve();
     expect(writes.some((value) => (
       value.includes('Badge Plugin') &&
-      value.includes('https://open-design.ai/plugins/templates/badge-plugin')
+      value.includes('https://open-design.ai/plugins/badge-plugin')
     ))).toBe(true);
   });
 
@@ -212,7 +212,7 @@ describe('PluginShareMenu', () => {
       container.querySelectorAll<HTMLAnchorElement>('a.plugin-share-item'),
     ).find((link) => link.textContent?.includes('Open in marketplace'));
     expect(marketplaceLink?.getAttribute('href')).toBe(
-      'https://open-design.ai/plugins/templates/plain',
+      '/marketplace/plain',
     );
   });
 

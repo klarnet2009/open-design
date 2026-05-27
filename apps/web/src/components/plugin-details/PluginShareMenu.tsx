@@ -22,7 +22,7 @@ import { useT } from '../../i18n';
 import { copyToClipboard } from '../../lib/copy-to-clipboard';
 import { derivePluginSourceLinks } from '../../runtime/plugin-source';
 
-const PUBLIC_TEMPLATE_MARKETPLACE_URL = 'https://open-design.ai/plugins/templates';
+const PUBLIC_PLUGIN_MARKETPLACE_URL = 'https://open-design.ai/plugins';
 
 interface Props {
   record: InstalledPluginRecord;
@@ -77,7 +77,11 @@ function buildInstallCommand(record: InstalledPluginRecord): string {
 export function buildPluginShareUrl(record: InstalledPluginRecord): string {
   // Share surfaces must produce recipient-openable links, not local
   // tools-dev origins such as 127.0.0.1:<port>.
-  return `${PUBLIC_TEMPLATE_MARKETPLACE_URL}/${encodeURIComponent(record.id)}`;
+  return `${PUBLIC_PLUGIN_MARKETPLACE_URL}/${encodeURIComponent(record.id)}`;
+}
+
+function buildPluginMarketplacePath(record: InstalledPluginRecord): string {
+  return `/marketplace/${encodeURIComponent(record.id)}`;
 }
 
 function buildMarkdownBadge(record: InstalledPluginRecord): string {
@@ -174,7 +178,7 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
     key: 'marketplace',
     label: t('plugins.actions.openMarketplace'),
     icon: 'eye',
-    href: buildPluginShareUrl(record),
+    href: buildPluginMarketplacePath(record),
   });
 
   const triggerClass =
