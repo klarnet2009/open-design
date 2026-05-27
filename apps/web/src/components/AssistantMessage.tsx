@@ -117,9 +117,15 @@ function SkillPluginCandidateCard({
   onDismissed: (candidateId: string) => void;
   onRequestOpenFile?: (name: string) => void;
 }) {
+  const t = useT();
   const [busy, setBusy] = useState<null | "draft" | "publish" | "contribute" | "dismiss">(null);
   const [notice, setNotice] = useState<ActionNotice | null>(null);
   const disabled = !projectId || busy !== null;
+  const description =
+    block.description === "Reusable skill material detected from a repository link." ||
+    block.description === "This repo looks like it could work as a plugin."
+      ? t("skillPluginCandidate.repoDescription")
+      : block.description || t("skillPluginCandidate.repoDescription");
 
   async function post(path: string, body: Record<string, unknown> = {}) {
     const resp = await fetch(path, {
@@ -218,7 +224,7 @@ function SkillPluginCandidateCard({
             <span>{block.title}</span>
           </div>
           <p className="plugin-action-card__description">
-            {block.description || "Open Design found reusable skill material that can become a plugin."}
+            {description}
           </p>
           <div className="plugin-action-card__actions">
             <button
@@ -228,7 +234,7 @@ function SkillPluginCandidateCard({
               onClick={() => void createDraft()}
             >
               <Icon name={busy === "draft" ? "spinner" : "plus"} size={13} />
-              <span>{busy === "draft" ? "Creating..." : "Create plugin"}</span>
+              <span>{busy === "draft" ? "Creating..." : t("skillPluginCandidate.createForMe")}</span>
             </button>
             <button
               type="button"
@@ -237,7 +243,7 @@ function SkillPluginCandidateCard({
               onClick={() => void share("contribute-open-design")}
             >
               <Icon name={busy === "contribute" ? "spinner" : "share"} size={13} />
-              <span>{busy === "contribute" ? "Starting..." : "Contribute"}</span>
+              <span>{busy === "contribute" ? "Starting..." : t("skillPluginCandidate.contributeToMain")}</span>
             </button>
             <button
               type="button"
@@ -246,7 +252,7 @@ function SkillPluginCandidateCard({
               onClick={() => void share("publish-github")}
             >
               <Icon name={busy === "publish" ? "spinner" : "github"} size={13} />
-              <span>{busy === "publish" ? "Starting..." : "Publish repo"}</span>
+              <span>{busy === "publish" ? "Starting..." : t("skillPluginCandidate.publishRepo")}</span>
             </button>
             <button
               type="button"
@@ -255,7 +261,7 @@ function SkillPluginCandidateCard({
               onClick={() => void dismiss()}
             >
               <Icon name={busy === "dismiss" ? "spinner" : "close"} size={13} />
-              <span>Dismiss</span>
+              <span>{t("skillPluginCandidate.dismiss")}</span>
             </button>
           </div>
           {notice ? (

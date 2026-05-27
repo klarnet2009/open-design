@@ -325,7 +325,7 @@ function deriveCandidateDescription(ref: SkillPluginCandidateSourceRef): string 
     .find((part) => part && !part.startsWith('#'));
   if (paragraph) return paragraph.replace(/\s+/gu, ' ').slice(0, 220);
   return ref.kind === 'url'
-    ? 'Reusable skill material detected from a repository link.'
+    ? 'This repo looks like it could work as a plugin.'
     : 'Reusable skill material detected from a project file.';
 }
 
