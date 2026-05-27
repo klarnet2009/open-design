@@ -5011,18 +5011,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       if (data.type === 'od:comment-target') {
         const snapshot = snapshotFromData(data);
         if (!snapshot.elementId) return;
-        const existing = previewComments.find((comment) =>
-          comment.filePath === file.name &&
-          comment.status === 'open' &&
-          comment.elementId === snapshot.elementId,
-        );
         const shouldOpenComposer = boardMode || commentCreateMode;
         setActiveCommentTarget((current) => (shouldOpenComposer ? snapshot : current));
         setHoveredCommentTarget(snapshot);
         setLiveCommentTargets((current) => new Map(current).set(snapshot.elementId, snapshot));
         if (shouldOpenComposer) {
-          setActivePreviewCommentId(existing?.id ?? null);
-          setCommentDraft(existing?.note ?? '');
+          setActivePreviewCommentId(null);
+          setCommentDraft('');
           setQueuedBoardNotes([]);
         }
         return;
@@ -6162,11 +6157,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       .sort((a, b) => commentActivityAt(b) - commentActivityAt(a)),
     [file.name, previewComments],
   );
-  const activeSideCommentId = activePreviewCommentId ?? (
-    activeCommentTarget
-      ? visibleSideComments.find((comment) => comment.elementId === activeCommentTarget.elementId)?.id ?? null
-      : null
-  );
+  const activeSideCommentId = activePreviewCommentId;
   const activeCommentTargetVisible = commentTargetIntersectsPreview(
     activeCommentTarget,
     overlayPreviewScale,
@@ -6336,10 +6327,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       }}
     />
   ) : null;
+  const activeComposerComment = activePreviewCommentId
+    ? visibleSideComments.find((comment) => comment.id === activePreviewCommentId) ?? null
+    : null;
   const commentComposer = boardMode && activeCommentTarget && activeCommentTargetVisible ? (
     <BoardComposerPopover
       target={activeCommentTarget}
-      existing={visibleSideComments.find((comment) => comment.elementId === activeCommentTarget.elementId) ?? null}
+      existing={activeComposerComment}
       draft={commentDraft}
       notes={queuedBoardNotes}
       onDraft={setCommentDraft}
