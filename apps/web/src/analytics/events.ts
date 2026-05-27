@@ -52,6 +52,7 @@ import type {
   FileManagerClickProps,
   ArtifactToolbarClickProps,
   TweaksPopoverClickProps,
+  CommentPopoverClickProps,
   ArtifactHeaderClickProps,
   PresentPopoverClickProps,
   ShareOptionPopoverClickProps,
@@ -439,6 +440,13 @@ export function trackArtifactToolbarClick(
 export function trackTweaksPopoverClick(
   track: Track,
   props: TweaksPopoverClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackCommentPopoverClick(
+  track: Track,
+  props: CommentPopoverClickProps,
 ): void {
   send(track, 'ui_click', props);
 }
