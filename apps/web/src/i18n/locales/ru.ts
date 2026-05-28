@@ -3,6 +3,16 @@ import { en } from './en';
 
 export const ru: Dict = {
   ...en,
+  'chat.amrCard.switchTitle': 'Не удалось вызвать модель — это выполнение приостановлено',
+  'chat.amrCard.switchBody': 'Переключитесь на официальный сервис моделей AMR от Open Design — без настройки API-ключа. После входа, авторизации и пополнения это выполнение будет автоматически повторено.',
+  'chat.amrCard.chipOfficial': 'Официальный хостинг',
+  'chat.amrCard.chipNoKey': 'Без API-ключа',
+  'chat.amrCard.chipAutoRetry': 'Авто-повтор после входа',
+  'chat.amrCard.switchCta': 'Переключиться на AMR и повторить',
+  'chat.amrError.authMessage': 'Ваш аккаунт AMR ещё не авторизован. Авторизуйте его, и это выполнение будет автоматически повторено.',
+  'chat.amrError.balanceMessage': 'Баланс AMR исчерпан. Пополните, чтобы продолжить это выполнение.',
+  'chat.amrError.authorizeCta': 'Авторизовать и повторить',
+  'chat.amrError.rechargeCta': 'Пополнить AMR',
   'plugins.actions.copyInstallCommand': 'Скопировать команду установки',
   'plugins.actions.copyPluginId': 'Скопировать ID плагина',
   'plugins.actions.copyReadmeBadge': 'Скопировать бейдж README',

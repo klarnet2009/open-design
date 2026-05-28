@@ -192,7 +192,10 @@ vi.mock('../../src/components/ChatPane', () => ({
             .flatMap((message) => message.events ?? [])
             .map((event) => {
               if (event.kind === 'text') return event.text;
-              if (event.kind === 'status') return event.detail ?? event.label;
+              if (event.kind === 'status') {
+                const code = (event as { code?: string }).code;
+                return `${code ? code + ' ' : ''}${event.detail ?? event.label}`;
+              }
               return '';
             })
             .filter(Boolean)
@@ -867,16 +870,12 @@ describe('ProjectView conversation run isolation', () => {
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(screen.getByTestId('chat-error').textContent).toContain('https://open-design.ai/amr/wallet'),
+      expect(screen.getByTestId('chat-error').textContent).toContain('insufficient balance'),
     );
+    // The structured code rides on the error event; ChatPane keys the recharge
+    // affordance off it.
     expect(screen.getByTestId('assistant-events').textContent).toContain(
-      'AMR Cloud reported insufficient balance for this model. Recharge your AMR wallet at https://open-design.ai/amr/wallet, then retry this run.',
-    );
-    expect(
-      screen.getByTestId('assistant-events').textContent?.match(/https:\/\/open-design\.ai\/amr\/wallet/g),
-    ).toHaveLength(1);
-    expect(screen.getByTestId('assistant-events').textContent).not.toContain(
-      '[Recharge AMR wallet](https://open-design.ai/amr/wallet)',
+      'AMR_INSUFFICIENT_BALANCE',
     );
     expect(screen.getByTestId('streaming-state').textContent).toBe('idle');
   });
@@ -912,11 +911,13 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(screen.getByTestId('chat-error').textContent).toContain(
-        'Use the AMR sign-in control in the model switcher or Settings',
+        'AMR sign-in is required',
       ),
     );
+    // The structured code rides on the error event; ChatPane keys the
+    // authorize-and-retry affordance off it.
     expect(screen.getByTestId('assistant-events').textContent).toContain(
-      'Use the AMR sign-in control in the model switcher or Settings',
+      'AMR_AUTH_REQUIRED',
     );
     expect(screen.getByTestId('streaming-state').textContent).toBe('idle');
   });

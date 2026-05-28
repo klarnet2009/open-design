@@ -3,6 +3,16 @@ import { en } from './en';
 
 export const fa: Dict = {
   ...en,
+  'chat.amrCard.switchTitle': 'فراخوانی مدل ناموفق بود — این اجرا متوقف شد',
+  'chat.amrCard.switchBody': 'به سرویس رسمی مدل AMR از Open Design سوئیچ کنید — بدون نیاز به تنظیم کلید API. پس از ورود، اعطای دسترسی و شارژ، این اجرا به‌طور خودکار دوباره انجام می‌شود.',
+  'chat.amrCard.chipOfficial': 'میزبانی رسمی',
+  'chat.amrCard.chipNoKey': 'بدون کلید API',
+  'chat.amrCard.chipAutoRetry': 'تلاش مجدد خودکار پس از ورود',
+  'chat.amrCard.switchCta': 'سوئیچ به AMR و تلاش مجدد',
+  'chat.amrError.authMessage': 'حساب AMR شما هنوز مجاز نشده است. آن را مجاز کنید تا این اجرا به‌طور خودکار دوباره انجام شود.',
+  'chat.amrError.balanceMessage': 'موجودی AMR شما تمام شده است. برای ادامه این اجرا شارژ کنید.',
+  'chat.amrError.authorizeCta': 'اعطای دسترسی و تلاش مجدد',
+  'chat.amrError.rechargeCta': 'شارژ AMR',
   'plugins.actions.copyInstallCommand': 'کپی دستور نصب',
   'plugins.actions.copyPluginId': 'کپی شناسهٔ افزونه',
   'plugins.actions.copyReadmeBadge': 'کپی نشان README',

@@ -3,6 +3,16 @@ import { en } from './en';
 
 export const ptBR: Dict = {
   ...en,
+  'chat.amrCard.switchTitle': 'Falha ao chamar o modelo — esta execução está pausada',
+  'chat.amrCard.switchBody': 'Mude para o serviço oficial de modelos AMR do Open Design — sem precisar configurar API Key. Após entrar, autorizar e recarregar, esta execução será repetida automaticamente.',
+  'chat.amrCard.chipOfficial': 'Hospedagem oficial',
+  'chat.amrCard.chipNoKey': 'Sem API Key',
+  'chat.amrCard.chipAutoRetry': 'Nova tentativa automática após entrar',
+  'chat.amrCard.switchCta': 'Mudar para AMR e tentar novamente',
+  'chat.amrError.authMessage': 'Sua conta AMR ainda não está autorizada. Autorize-a e esta execução será repetida automaticamente.',
+  'chat.amrError.balanceMessage': 'Seu saldo AMR acabou. Recarregue para continuar esta execução.',
+  'chat.amrError.authorizeCta': 'Autorizar e tentar novamente',
+  'chat.amrError.rechargeCta': 'Recarregar AMR',
   'plugins.actions.copyInstallCommand': 'Copiar comando de instalação',
   'plugins.actions.copyPluginId': 'Copiar ID do plugin',
   'plugins.actions.copyReadmeBadge': 'Copiar selo do README',

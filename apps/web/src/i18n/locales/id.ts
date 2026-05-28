@@ -3,6 +3,16 @@ import { en } from './en';
 
 export const id: Dict = {
   ...en,
+  'chat.amrCard.switchTitle': 'Panggilan model gagal — proses ini dijeda',
+  'chat.amrCard.switchBody': 'Beralih ke layanan model AMR resmi Open Design — tanpa perlu mengatur API Key. Setelah masuk, otorisasi, dan isi ulang, proses ini akan dicoba ulang otomatis.',
+  'chat.amrCard.chipOfficial': 'Hosting resmi',
+  'chat.amrCard.chipNoKey': 'Tanpa API Key',
+  'chat.amrCard.chipAutoRetry': 'Coba ulang otomatis setelah masuk',
+  'chat.amrCard.switchCta': 'Beralih ke AMR & coba lagi',
+  'chat.amrError.authMessage': 'Akun AMR Anda belum diotorisasi. Otorisasi sekarang dan proses ini akan dicoba ulang otomatis.',
+  'chat.amrError.balanceMessage': 'Saldo AMR Anda habis. Isi ulang untuk melanjutkan proses ini.',
+  'chat.amrError.authorizeCta': 'Otorisasi & coba lagi',
+  'chat.amrError.rechargeCta': 'Isi ulang AMR',
   'plugins.actions.copyInstallCommand': 'Salin perintah instal',
   'plugins.actions.copyPluginId': 'Salin ID plugin',
   'plugins.actions.copyReadmeBadge': 'Salin lencana README',

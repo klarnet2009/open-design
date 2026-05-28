@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const zhCN: Dict = {
+  'chat.amrCard.switchTitle': "模型调用失败，当前任务已暂停",
+  'chat.amrCard.switchBody': "可切换到 Open Design 官方 AMR 模型服务，无需配置 API Key。完成登录、授权和充值后，将自动重试当前任务。",
+  'chat.amrCard.chipOfficial': "官方托管",
+  'chat.amrCard.chipNoKey': "无需 API Key",
+  'chat.amrCard.chipAutoRetry': "授权后自动重试",
+  'chat.amrCard.switchCta': "切换到 AMR 并重试",
+  'chat.amrError.authMessage': "AMR 账号尚未授权。完成授权后将自动重试当前任务。",
+  'chat.amrError.balanceMessage': "AMR 账户余额不足。充值后可继续运行当前任务。",
+  'chat.amrError.authorizeCta': "授权并重试",
+  'chat.amrError.rechargeCta': "前往充值",
   'common.cancel': '取消',
   'common.save': '保存',
   'common.close': '关闭',

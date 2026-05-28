@@ -3,6 +3,16 @@ import type { Dict } from '../types';
 
 export const hu: Dict = {
   ...en,
+  'chat.amrCard.switchTitle': 'Sikertelen modellhívás — ez a futtatás szünetel',
+  'chat.amrCard.switchBody': 'Válts az Open Design hivatalos AMR modellszolgáltatására — nincs szükség API-kulcs beállítására. Bejelentkezés, engedélyezés és feltöltés után ez a futtatás automatikusan újraindul.',
+  'chat.amrCard.chipOfficial': 'Hivatalos szolgáltatás',
+  'chat.amrCard.chipNoKey': 'Nincs API-kulcs',
+  'chat.amrCard.chipAutoRetry': 'Automatikus újrapróbálkozás bejelentkezés után',
+  'chat.amrCard.switchCta': 'Váltás AMR-re és újrapróbálkozás',
+  'chat.amrError.authMessage': 'Az AMR-fiókod még nincs engedélyezve. Engedélyezd, és ez a futtatás automatikusan újraindul.',
+  'chat.amrError.balanceMessage': 'Az AMR-egyenleged elfogyott. Tölts fel a futtatás folytatásához.',
+  'chat.amrError.authorizeCta': 'Engedélyezés és újrapróbálkozás',
+  'chat.amrError.rechargeCta': 'AMR feltöltése',
   'plugins.actions.copyInstallCommand': 'Telepítési parancs másolása',
   'plugins.actions.copyPluginId': 'Pluginazonosító másolása',
   'plugins.actions.copyReadmeBadge': 'README jelvény másolása',

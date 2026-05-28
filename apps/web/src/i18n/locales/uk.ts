@@ -3,6 +3,16 @@ import { en } from './en';
 
 export const uk: Dict = {
   ...en,
+  'chat.amrCard.switchTitle': 'Не вдалося викликати модель — це виконання призупинено',
+  'chat.amrCard.switchBody': 'Перейдіть на офіційний сервіс моделей AMR від Open Design — без налаштування API-ключа. Після входу, авторизації та поповнення це виконання буде повторено автоматично.',
+  'chat.amrCard.chipOfficial': 'Офіційний хостинг',
+  'chat.amrCard.chipNoKey': 'Без API-ключа',
+  'chat.amrCard.chipAutoRetry': 'Авто-повтор після входу',
+  'chat.amrCard.switchCta': 'Перейти на AMR і повторити',
+  'chat.amrError.authMessage': 'Ваш обліковий запис AMR ще не авторизовано. Авторизуйте, і це виконання буде повторено автоматично.',
+  'chat.amrError.balanceMessage': 'Баланс AMR вичерпано. Поповніть, щоб продовжити це виконання.',
+  'chat.amrError.authorizeCta': 'Авторизувати та повторити',
+  'chat.amrError.rechargeCta': 'Поповнити AMR',
   'plugins.actions.copyInstallCommand': 'Скопіювати команду встановлення',
   'plugins.actions.copyPluginId': 'Скопіювати ID плагіна',
   'plugins.actions.copyReadmeBadge': 'Скопіювати бейдж README',

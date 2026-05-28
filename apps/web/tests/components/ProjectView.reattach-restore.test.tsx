@@ -417,15 +417,10 @@ describe('ProjectView daemon reattach restore', () => {
         .filter((m) => m?.id === 'msg-amr-balance' && m.runStatus === 'failed')
         .at(-1);
       expect(finalSave?.events?.some(
-        (event) => event.kind === 'text'
-          && event.text.includes('https://open-design.ai/amr/wallet')
-          && !event.text.includes('[Recharge AMR wallet](https://open-design.ai/amr/wallet)'),
-      )).toBe(true);
-      expect(finalSave?.events?.some(
         (event) => event.kind === 'status'
           && event.label === 'error'
-          && event.detail?.includes('https://open-design.ai/amr/wallet'),
-      )).toBe(false);
+          && (event as { code?: string }).code === 'AMR_INSUFFICIENT_BALANCE',
+      )).toBe(true);
     });
   });
 

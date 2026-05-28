@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const en: Dict = {
+  'chat.amrCard.switchTitle': "Model call failed — this run is paused",
+  'chat.amrCard.switchBody': "Switch to Open Design's official AMR model service — no API key setup needed. After you sign in, authorize, and top up, this run retries automatically.",
+  'chat.amrCard.chipOfficial': "Official hosting",
+  'chat.amrCard.chipNoKey': "No API key",
+  'chat.amrCard.chipAutoRetry': "Auto-retry after sign-in",
+  'chat.amrCard.switchCta': "Switch to AMR & retry",
+  'chat.amrError.authMessage': "Your AMR account isn't authorized yet. Authorize it and this run retries automatically.",
+  'chat.amrError.balanceMessage': "Your AMR balance has run out. Top up to keep this run going.",
+  'chat.amrError.authorizeCta': "Authorize & retry",
+  'chat.amrError.rechargeCta': "Top up AMR",
   'common.cancel': 'Cancel',
   'common.save': 'Save',
   'common.close': 'Close',

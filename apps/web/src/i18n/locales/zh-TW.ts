@@ -3,6 +3,16 @@ import { en } from './en';
 
 export const zhTW: Dict = {
   ...en,
+  'chat.amrCard.switchTitle': "模型呼叫失敗，目前任務已暫停",
+  'chat.amrCard.switchBody': "可切換到 Open Design 官方 AMR 模型服務，無需設定 API Key。完成登入、授權與儲值後，將自動重試目前任務。",
+  'chat.amrCard.chipOfficial': "官方代管",
+  'chat.amrCard.chipNoKey': "無需 API Key",
+  'chat.amrCard.chipAutoRetry': "授權後自動重試",
+  'chat.amrCard.switchCta': "切換到 AMR 並重試",
+  'chat.amrError.authMessage': "AMR 帳號尚未授權。完成授權後將自動重試目前任務。",
+  'chat.amrError.balanceMessage': "AMR 帳戶餘額不足。儲值後即可繼續執行目前任務。",
+  'chat.amrError.authorizeCta': "授權並重試",
+  'chat.amrError.rechargeCta': "前往儲值",
   'plugins.actions.copyInstallCommand': '複製安裝命令',
   'plugins.actions.copyPluginId': '複製外掛 ID',
   'plugins.actions.copyReadmeBadge': '複製 README 徽章',

@@ -145,6 +145,11 @@ export type SettingsSection =
   | 'library'
   | 'about';
 
+// One-shot focus hint when opening the dialog. `'amr'` scrolls the AMR agent
+// card into view on the execution section and plays a highlight (plus a
+// sign-in coachmark when the user has not authorized AMR yet).
+export type SettingsHighlight = 'amr' | null;
+
 interface Props {
   initial: AppConfig;
   agents: AgentInfo[];
@@ -153,6 +158,7 @@ interface Props {
   appVersionInfo: AppVersionInfo | null;
   welcome?: boolean;
   initialSection?: SettingsSection;
+  initialHighlight?: SettingsHighlight;
   /**
    * Persist the current draft. Invoked by the dialog's autosave loop on
    * every committed edit. Returns a promise that resolves once both
@@ -805,6 +811,7 @@ export function SettingsDialog({
   appVersionInfo,
   welcome,
   initialSection = 'execution',
+  initialHighlight = null,
   onPersist,
   onPersistComposioKey,
   composioConfigLoading = false,
@@ -856,6 +863,17 @@ export function SettingsDialog({
   // (About) keeps the previous scrollTop, so the new section's header
   // can land out of view and the panel reads as half-loaded. Issue #634.
   const settingsContentRef = useRef<HTMLDivElement | null>(null);
+  // AMR-card focus, driven by the failed-run nudge (`initialHighlight==='amr'`).
+  const amrCardRef = useRef<HTMLDivElement | null>(null);
+  // Card pulse: a brief attention flash that auto-clears after a few seconds.
+  const [amrHighlightActive, setAmrHighlightActive] = useState(false);
+  // Coachmark: persists (unlike the card pulse) until the real pointer reaches
+  // the authorize button — so it won't vanish while the user is still moving
+  // toward it.
+  const [amrCoachmarkArmed, setAmrCoachmarkArmed] = useState(false);
+  // The fake-cursor coachmark dismisses as soon as the real pointer reaches the
+  // authorize button — once the user has found it, the hint has done its job.
+  const [amrCoachmarkDismissed, setAmrCoachmarkDismissed] = useState(false);
   const [agentRescanRunning, setAgentRescanRunning] = useState(false);
   const [agentRescanNotice, setAgentRescanNotice] =
     useState<RescanNotice | null>(null);
@@ -982,6 +1000,34 @@ export function SettingsDialog({
     const el = settingsContentRef.current;
     if (el) el.scrollTop = 0;
   }, [activeSection]);
+
+  // One-shot AMR-card focus from the failed-run nudge: scroll the card into
+  // view (on the next frame, so it wins over the section's scrollTop reset
+  // above) and play a brief highlight + arm the sign-in coachmark. The
+  // coachmark only actually shows when the AMR card reports a signed-out state
+  // (`amrCardStatus?.loggedIn === false`). If the execution pane is in API mode
+  // the AMR card is absent and this no-ops.
+  useEffect(() => {
+    if (initialHighlight !== 'amr' || activeSection !== 'execution') return;
+    let cancelled = false;
+    const raf = requestAnimationFrame(() => {
+      if (cancelled) return;
+      amrCardRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      setAmrCoachmarkDismissed(false);
+      setAmrHighlightActive(true);
+      setAmrCoachmarkArmed(true);
+    });
+    // Only the card pulse auto-clears; the coachmark persists until the pointer
+    // reaches the authorize button (or the user signs in).
+    const clear = setTimeout(() => {
+      if (!cancelled) setAmrHighlightActive(false);
+    }, 3200);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      clearTimeout(clear);
+    };
+  }, [initialHighlight, activeSection]);
 
   const selectedMemoryChatAgent =
     cfg.mode === 'daemon' && cfg.agentId
@@ -2608,6 +2654,7 @@ export function SettingsDialog({
                             a.authStatus === 'unknown'
                               ? (a.authMessage ?? a.path ?? '')
                               : (a.path ?? '');
+                          const amrHighlighted = isAmrAgent && amrHighlightActive;
                           const amrCardEmail =
                             isAmrAgent && active && amrCardStatus?.loggedIn
                               ? amrCardStatus.user?.email || t('settings.amrSignedIn')
@@ -2621,9 +2668,11 @@ export function SettingsDialog({
                           const cardEl = (
                             <div
                               key={a.id}
+                              ref={isAmrAgent ? amrCardRef : undefined}
                               className={
                                 'agent-card agent-card-installed' +
-                                (active ? ' active' : '')
+                                (active ? ' active' : '') +
+                                (amrHighlighted ? ' agent-card--amr-highlight' : '')
                               }
                               onMouseEnter={() => {
                                 if (!isAmrAgent || !active) return;
@@ -2715,16 +2764,43 @@ export function SettingsDialog({
                                 </button>
                                 {isAmrAgent ? (
                                   active && amrCardStatusReady ? (
-                                    <AmrLoginPill
-                                      className="agent-card-amr-auth"
-                                      hideSignedOutStatus
-                                      hideSignedInStatus
-                                      initialStatus={amrCardStatus}
-                                      skipInitialRefresh
-                                      signInLabel={t('settings.amrAuthorize')}
-                                      revealPendingCancelAction={amrRevealPendingCancelAction}
-                                      onStatusChange={setAmrCardStatus}
-                                    />
+                                    <span
+                                      className="amr-auth-anchor"
+                                      onMouseEnter={() => setAmrCoachmarkDismissed(true)}
+                                    >
+                                      {amrCoachmarkArmed &&
+                                      amrCardStatus?.loggedIn === false &&
+                                      !amrCoachmarkDismissed ? (
+                                        <span className="amr-coachmark" aria-hidden="true">
+                                          <span className="amr-coachmark__ring" />
+                                          <svg
+                                            className="amr-coachmark__cursor"
+                                            width="22"
+                                            height="22"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                          >
+                                            <path
+                                              d="M9.4 13V8a1.8 1.8 0 0 1 3.6 0v4.6c.35-.55 1-.95 1.75-.95.65 0 1.25.32 1.6.85.32-.5.9-.8 1.55-.8.8 0 1.5.5 1.78 1.2.35-.3.8-.5 1.3-.5 1.1 0 2 .9 2 2v3.05a5.6 5.6 0 0 1-5.6 5.6h-2.5a5 5 0 0 1-3.75-1.7l-4.2-4.75a1.85 1.85 0 0 1 2.65-2.6L9.4 16Z"
+                                              fill="#fff"
+                                              stroke="#1a1a1a"
+                                              strokeWidth="1.1"
+                                              strokeLinejoin="round"
+                                            />
+                                          </svg>
+                                        </span>
+                                      ) : null}
+                                      <AmrLoginPill
+                                        className="agent-card-amr-auth"
+                                        hideSignedOutStatus
+                                        hideSignedInStatus
+                                        initialStatus={amrCardStatus}
+                                        skipInitialRefresh
+                                        signInLabel={t('settings.amrAuthorize')}
+                                        revealPendingCancelAction={amrRevealPendingCancelAction}
+                                        onStatusChange={setAmrCardStatus}
+                                      />
+                                    </span>
                                   ) : (
                                     <div
                                       className="agent-card-amr-auth agent-card-amr-auth--placeholder"

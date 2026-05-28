@@ -3,6 +3,16 @@ import type { Dict } from '../types';
 
 export const th: Dict = {
   ...en,
+  'chat.amrCard.switchTitle': 'เรียกใช้โมเดลล้มเหลว — งานนี้ถูกหยุดชั่วคราว',
+  'chat.amrCard.switchBody': 'สลับไปยังบริการโมเดล AMR อย่างเป็นทางการของ Open Design — ไม่ต้องตั้งค่า API Key หลังจากเข้าสู่ระบบ ให้สิทธิ์ และเติมเงินแล้ว งานนี้จะถูกลองใหม่โดยอัตโนมัติ',
+  'chat.amrCard.chipOfficial': 'โฮสติ้งอย่างเป็นทางการ',
+  'chat.amrCard.chipNoKey': 'ไม่ต้องใช้ API Key',
+  'chat.amrCard.chipAutoRetry': 'ลองใหม่อัตโนมัติหลังเข้าสู่ระบบ',
+  'chat.amrCard.switchCta': 'สลับไปยัง AMR และลองใหม่',
+  'chat.amrError.authMessage': 'บัญชี AMR ของคุณยังไม่ได้รับอนุญาต ให้สิทธิ์แล้วงานนี้จะถูกลองใหม่โดยอัตโนมัติ',
+  'chat.amrError.balanceMessage': 'ยอดเงิน AMR ของคุณหมดแล้ว เติมเงินเพื่อดำเนินงานนี้ต่อ',
+  'chat.amrError.authorizeCta': 'ให้สิทธิ์และลองใหม่',
+  'chat.amrError.rechargeCta': 'เติมเงิน AMR',
   'plugins.actions.copyInstallCommand': 'คัดลอกคำสั่งติดตั้ง',
   'plugins.actions.copyPluginId': 'คัดลอก ID ปลั๊กอิน',
   'plugins.actions.copyReadmeBadge': 'คัดลอกแบดจ์ README',

@@ -3,6 +3,16 @@ import type { Dict } from '../types';
 
 export const tr: Dict = {
   ...en,
+  'chat.amrCard.switchTitle': 'Model çağrısı başarısız oldu — bu çalıştırma duraklatıldı',
+  'chat.amrCard.switchBody': 'Open Design\'ın resmi AMR model hizmetine geçin — API anahtarı yapılandırması gerekmez. Oturum açma, yetkilendirme ve bakiye yükleme sonrası bu çalıştırma otomatik olarak yeniden denenir.',
+  'chat.amrCard.chipOfficial': 'Resmi hizmet',
+  'chat.amrCard.chipNoKey': 'API anahtarı gerekmez',
+  'chat.amrCard.chipAutoRetry': 'Giriş sonrası otomatik yeniden deneme',
+  'chat.amrCard.switchCta': 'AMR\'ye geç ve yeniden dene',
+  'chat.amrError.authMessage': 'AMR hesabınız henüz yetkilendirilmedi. Yetkilendirin ve bu çalıştırma otomatik olarak yeniden denensin.',
+  'chat.amrError.balanceMessage': 'AMR bakiyeniz bitti. Çalıştırmaya devam etmek için bakiye yükleyin.',
+  'chat.amrError.authorizeCta': 'Yetkilendir ve yeniden dene',
+  'chat.amrError.rechargeCta': 'AMR bakiyesi yükle',
   'plugins.actions.copyInstallCommand': 'Kurulum komutunu kopyala',
   'plugins.actions.copyPluginId': 'Eklenti ID’sini kopyala',
   'plugins.actions.copyReadmeBadge': 'README rozetini kopyala',

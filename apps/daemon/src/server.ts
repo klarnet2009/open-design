@@ -204,7 +204,11 @@ import {
 import { narrowProjectCritiqueOverride } from './critique/spawn-inputs.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
-import { classifyAgentAuthFailure, cursorAuthGuidance } from './runtimes/auth.js';
+import {
+  classifyAgentAuthFailure,
+  classifyAgentServiceFailure,
+  cursorAuthGuidance,
+} from './runtimes/auth.js';
 import { createQoderStreamHandler } from './qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
@@ -332,6 +336,7 @@ import {
   resolveProjectDir,
   resolveProjectFilePath,
   writeProjectFile,
+  reconcileHtmlArtifactManifest,
 } from './projects.js';
 import { validateArtifactManifestInput } from './artifact-manifest.js';
 import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
@@ -10840,6 +10845,21 @@ export async function startServer({
     const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
     const resolvedBin = agentLaunch.selectedPath;
 
+    // Hoisted above the AMR catalog preflight: the empty-catalog branch
+    // below calls `sendAmrAccountFailure(...)` to surface AMR_AUTH_REQUIRED
+    // for signed-out users, and a `const` declared later in the same outer
+    // function scope would hit a TDZ ReferenceError before initialization.
+    const sendAmrAccountFailure = (failure) => {
+      send('error', createSseErrorPayload(
+        failure.code,
+        failure.message,
+        {
+          retryable: true,
+          details: amrAccountFailureDetails(failure),
+        },
+      ));
+    };
+
     if (def.id === 'amr' && resolvedBin && agentLaunch.launchPath) {
       const launchPath = agentLaunch.launchPath ?? resolvedBin;
       const modelProbeEnv = launchPath
@@ -10869,12 +10889,47 @@ export async function startServer({
         liveModels.map((candidate) => candidate?.id).filter(Boolean),
       );
       if (liveModelIds.size === 0) {
+        // An empty AMR catalog usually means the user is signed out — `vela
+        // models` returns 401 and the catch above leaves `liveModels` empty.
+        // Surface AMR_AUTH_REQUIRED first so the chat shows the relogin
+        // affordance; otherwise the user sees a misleading "choose a model"
+        // when the real fix is to sign in.
+        if (def.id === 'amr') {
+          const loginStatus = readVelaLoginStatus(
+            modelProbeEnv ?? process.env,
+            configuredAgentEnv,
+          );
+          if (!loginStatus.loggedIn) {
+            sendAmrAccountFailure({
+              code: 'AMR_AUTH_REQUIRED',
+              message:
+                'AMR sign-in is required. Sign in to AMR Cloud again, then retry this run.',
+              action: 'relogin',
+            });
+            return design.runs.finish(run, 'failed', 1, null);
+          }
+        }
         send('error', createAmrModelUnavailablePayload(safeModel, {
           reason: 'model_catalog_unavailable',
         }));
         return design.runs.finish(run, 'failed', 1, null);
       }
-      if (!safeModel || safeModel === 'default') {
+      // `safeModel` was pre-resolved via the agent-wide cached model order,
+      // so a request that came in as 'default' (or empty) is already a
+      // concrete id by this point — `safeModel === 'default'` is rarely true.
+      // If the user actually asked for the agent default and the cached id no
+      // longer appears in the FRESH catalog (e.g. the AMR Link catalog rolled
+      // since `/api/agents` last responded), fall back to `liveModels[0]` from
+      // the fresh probe instead of rejecting their run as `AMR_MODEL_UNAVAILABLE`.
+      const userAskedForDefault =
+        typeof model !== 'string' ||
+        !model.trim() ||
+        model.trim().toLowerCase() === 'default';
+      if (
+        !safeModel ||
+        safeModel === 'default' ||
+        (userAskedForDefault && !liveModelIds.has(safeModel))
+      ) {
         safeModel = liveModels[0]?.id ?? null;
         agentOptions.model = safeModel;
       }
@@ -10950,16 +11005,12 @@ export async function startServer({
       return design.runs.finish(run, 'failed', 1, null);
     }
 
-    const sendAmrAccountFailure = (failure) => {
-      send('error', createSseErrorPayload(
-        failure.code,
-        failure.message,
-        {
-          retryable: true,
-          details: amrAccountFailureDetails(failure),
-        },
-      ));
-    };
+    // `runStartTimeMs` is consumed by the run-end artifact-manifest
+    // reconciler (#2893 / #3110) to skip artifacts whose mtime predates
+    // this run. The original main-side hunk also re-declared `const send`
+    // here; on this branch `send` was hoisted into the AMR preflight
+    // earlier, so we keep only the new `runStartTimeMs` declaration.
+    const runStartTimeMs = Date.now();
     const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs();
     const artifactQuietPeriodMs = resolveChatRunArtifactQuietPeriodMs();
     const inactivityKillGraceMs = 3_000;
@@ -11485,21 +11536,31 @@ export async function startServer({
         if (agentStreamError) return;
         agentStreamError = String(ev.message || 'Agent stream error');
         clearInactivityWatchdog();
-        const authFailure = classifyAgentAuthFailure(
-          agentId,
-          [
-            agentStreamError,
-            typeof ev.raw === 'string' ? ev.raw : '',
-            agentStdoutTail,
-            agentStderrTail,
-          ].join('\n'),
-        );
+        const failureText = [
+          agentStreamError,
+          typeof ev.raw === 'string' ? ev.raw : '',
+          agentStdoutTail,
+          agentStderrTail,
+        ].join('\n');
+        const authFailure = classifyAgentAuthFailure(agentId, failureText);
         if (authFailure?.status === 'missing') {
           send('error', createSseErrorPayload(
             'AGENT_AUTH_REQUIRED',
             authFailure.message ?? cursorAuthGuidance(),
             { retryable: true },
           ));
+          return;
+        }
+        // Recover the specific model-service failure class (auth / quota /
+        // upstream) for agents without a tailored probe (Claude Code, codex,
+        // …), so the chat shows an accurate reason instead of the generic
+        // execution-failed bucket.
+        const serviceCode = classifyAgentServiceFailure(failureText);
+        if (serviceCode) {
+          send('error', createSseErrorPayload(serviceCode, agentStreamError, {
+            details: ev.raw ? { raw: ev.raw } : undefined,
+            retryable: true,
+          }));
           return;
         }
         send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', agentStreamError, {
@@ -11781,13 +11842,60 @@ export async function startServer({
           stdoutTail: agentStdoutTail,
           env: spawnedAgentEnv,
         });
+        // A non-zero exit whose output reads as an auth / quota / upstream
+        // problem (typical of Claude Code, codex, …) gets the specific code
+        // rather than the generic execution-failed bucket; the human-readable
+        // message still prefers the richer CLI diagnostic when we have one.
+        const serviceCode = classifyAgentServiceFailure(
+          `${agentStderrTail}\n${agentStdoutTail}`,
+        );
         if (diagnostic) {
           send('error', createSseErrorPayload(
-            'AGENT_EXECUTION_FAILED',
+            serviceCode ?? 'AGENT_EXECUTION_FAILED',
             diagnostic.message,
             { retryable: diagnostic.retryable, details: { detail: diagnostic.detail } },
           ));
+        } else if (serviceCode) {
+          const detail = (agentStderrTail || agentStdoutTail || '').trim();
+          send('error', createSseErrorPayload(
+            serviceCode,
+            detail || 'The model service returned an error.',
+            { retryable: true },
+          ));
         }
+      }
+      // Reconcile any HTML artifacts that were written during this run
+      // without a manifest sidecar (e.g. agent used write_file instead of
+      // create_artifact, or the run terminated between HTML write and
+      // sidecar write). Only files modified after the run started are
+      // touched — pre-existing HTML in imported-folder projects must not
+      // receive spurious manifests. Best-effort; must not block finalisation.
+      // See issue #2893.
+      if (run.projectId) {
+        (async () => {
+          try {
+            const project = getProject(db, run.projectId);
+            const files = await listFiles(PROJECTS_DIR, run.projectId, {
+              metadata: project?.metadata,
+            });
+            const dir = resolveProjectDir(PROJECTS_DIR, run.projectId, project?.metadata);
+            for (const f of files) {
+              const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
+              if (ext !== '.html' && ext !== '.htm') continue;
+              try {
+                const filePath = path.join(dir, f.name);
+                const st = await fs.promises.stat(filePath);
+                if (st.mtimeMs < runStartTimeMs) continue;
+                await reconcileHtmlArtifactManifest(
+                  PROJECTS_DIR,
+                  run.projectId,
+                  f.name,
+                  project?.metadata,
+                );
+              } catch { /* per-file best-effort */ }
+            }
+          } catch { /* project-level best-effort */ }
+        })();
       }
       design.runs.finish(run, status, code, signal);
     });

@@ -3,6 +3,16 @@ import type { Dict } from '../types';
 
 export const ko: Dict = {
   ...en,
+  'chat.amrCard.switchTitle': '모델 호출 실패 — 이 작업이 일시중지되었습니다',
+  'chat.amrCard.switchBody': 'Open Design 공식 AMR 모델 서비스로 전환하세요 — API 키 설정이 필요 없습니다. 로그인・인증・충전이 완료되면 이 작업이 자동으로 재시도됩니다.',
+  'chat.amrCard.chipOfficial': '공식 호스팅',
+  'chat.amrCard.chipNoKey': 'API 키 불필요',
+  'chat.amrCard.chipAutoRetry': '로그인 후 자동 재시도',
+  'chat.amrCard.switchCta': 'AMR로 전환하고 재시도',
+  'chat.amrError.authMessage': 'AMR 계정이 아직 인증되지 않았습니다. 인증하면 이 작업이 자동으로 재시도됩니다.',
+  'chat.amrError.balanceMessage': 'AMR 잔액이 부족합니다. 충전하여 이 작업을 계속 진행하세요.',
+  'chat.amrError.authorizeCta': '인증하고 재시도',
+  'chat.amrError.rechargeCta': 'AMR 충전',
   'plugins.actions.copyInstallCommand': '설치 명령 복사',
   'plugins.actions.copyPluginId': '플러그인 ID 복사',
   'plugins.actions.copyReadmeBadge': 'README 배지 복사',

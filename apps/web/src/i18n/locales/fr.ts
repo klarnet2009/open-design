@@ -3,6 +3,16 @@ import type { Dict } from '../types';
 
 export const fr: Dict = {
   ...en,
+  'chat.amrCard.switchTitle': 'Échec de l\'appel du modèle — cette exécution est en pause',
+  'chat.amrCard.switchBody': 'Passez au service de modèles AMR officiel d\'Open Design — aucune clé API à configurer. Après connexion, autorisation et recharge, cette exécution sera relancée automatiquement.',
+  'chat.amrCard.chipOfficial': 'Hébergement officiel',
+  'chat.amrCard.chipNoKey': 'Sans clé API',
+  'chat.amrCard.chipAutoRetry': 'Reprise automatique après connexion',
+  'chat.amrCard.switchCta': 'Passer à AMR et relancer',
+  'chat.amrError.authMessage': 'Votre compte AMR n\'est pas encore autorisé. Autorisez-le et cette exécution sera relancée automatiquement.',
+  'chat.amrError.balanceMessage': 'Votre solde AMR est épuisé. Rechargez pour poursuivre cette exécution.',
+  'chat.amrError.authorizeCta': 'Autoriser et relancer',
+  'chat.amrError.rechargeCta': 'Recharger AMR',
   'plugins.actions.copyInstallCommand': 'Copier la commande d’installation',
   'plugins.actions.copyPluginId': 'Copier l’ID du plugin',
   'plugins.actions.copyReadmeBadge': 'Copier le badge README',

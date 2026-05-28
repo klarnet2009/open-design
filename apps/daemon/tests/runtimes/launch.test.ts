@@ -121,10 +121,18 @@ fsTest('resolveAgentLaunch uses packaged built-in Vela for AMR and prepends its 
       const builtInDir = join(resourceRoot, 'bin');
       const builtInVela = join(builtInDir, 'vela');
       const companionTree = join(builtInDir, 'libexec', 'opencode');
+      const companionExe = join(
+        companionTree,
+        process.platform === 'win32' ? 'opencode.exe' : 'opencode',
+      );
       mkdirSync(builtInDir, { recursive: true });
       mkdirSync(companionTree, { recursive: true });
       writeFileSync(builtInVela, '#!/bin/sh\nexit 0\n');
       chmodSync(builtInVela, 0o755);
+      // packagedVelaOpenCodeCompanionTree now verifies the inner opencode
+      // executable, not just the directory — see #3148. Fixture must match.
+      writeFileSync(companionExe, '#!/bin/sh\nexit 0\n');
+      chmodSync(companionExe, 0o755);
       process.env.PATH = '';
       process.env.OD_AGENT_HOME = join(root, 'empty-home');
       process.env.OD_RESOURCE_ROOT = resourceRoot;

@@ -1678,6 +1678,16 @@ export interface Dict {
   'project.instructionsActive': string;
   'project.resizeChatPanel': string;
   'chat.tabChat': string;
+  'chat.amrCard.switchTitle': string;
+  'chat.amrCard.switchBody': string;
+  'chat.amrCard.chipOfficial': string;
+  'chat.amrCard.chipNoKey': string;
+  'chat.amrCard.chipAutoRetry': string;
+  'chat.amrCard.switchCta': string;
+  'chat.amrError.authMessage': string;
+  'chat.amrError.balanceMessage': string;
+  'chat.amrError.authorizeCta': string;
+  'chat.amrError.rechargeCta': string;
   'chat.tabComments': string;
   'chat.commentsSoon': string;
   'chat.comments.attached': string;
