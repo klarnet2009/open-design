@@ -2009,14 +2009,14 @@ function commentDisplayLabel(comment: PreviewComment, t: TranslateFn): string {
   const htmlHint = String(comment.htmlHint || '').trim().toLowerCase();
   const elementId = String(comment.elementId || '').trim().toLowerCase();
   const source = `${label} ${htmlHint} ${elementId}`;
-  if (/\b(?:img|picture|video|canvas|svg)\b/.test(source)) return 'Image';
-  if (/\b(?:button|input|textarea|select|label)\b/.test(source)) return 'Control';
-  if (/\b(?:a)\b/.test(label) || /^<a\b/.test(htmlHint)) return 'Link';
-  if (/\b(?:h1|h2|h3|h4|h5|h6|p|span|strong|em|small|li|dt|dd)\b/.test(source)) return 'Text';
-  if (/\b(?:section|main|header|footer|nav|article|aside)\b/.test(source)) return 'Section';
-  if (label.endsWith('.html') || elementId.startsWith('file-comment-')) return 'Page';
-  if (comment.text.trim()) return 'Text';
-  return 'Area';
+  if (/\b(?:img|picture|video|canvas|svg)\b/.test(source)) return t('chat.comments.targetImage');
+  if (/\b(?:button|input|textarea|select|label)\b/.test(source)) return t('chat.comments.targetControl');
+  if (/\b(?:a)\b/.test(label) || /^<a\b/.test(htmlHint)) return t('chat.comments.targetLink');
+  if (/\b(?:h1|h2|h3|h4|h5|h6|p|span|strong|em|small|li|dt|dd)\b/.test(source)) return t('chat.comments.targetText');
+  if (/\b(?:section|main|header|footer|nav|article|aside)\b/.test(source)) return t('chat.comments.targetSection');
+  if (label.endsWith('.html') || elementId.startsWith('file-comment-')) return t('chat.comments.targetPage');
+  if (comment.text.trim()) return t('chat.comments.targetText');
+  return t('chat.comments.targetArea');
 }
 
 export function CommentSidePanel({
@@ -6277,7 +6277,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   };
   const boardAvailable = mode === 'preview' && source !== null;
   const showPreviewToolbarControls = mode === 'preview';
-  const manualEditPanel = manualEditMode && selectedManualEditTarget ? (
+  const manualEditPanel = manualEditMode ? (
     <ManualEditPanel
       targets={manualEditTargets}
       selectedTarget={selectedManualEditTarget}

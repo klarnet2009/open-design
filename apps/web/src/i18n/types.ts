@@ -1716,6 +1716,13 @@ export interface Dict {
   'chat.comments.pinAtCoords': string;
   'chat.comments.capturedItems': string;
   'chat.comments.clear': string;
+  'chat.comments.targetImage': string;
+  'chat.comments.targetControl': string;
+  'chat.comments.targetLink': string;
+  'chat.comments.targetText': string;
+  'chat.comments.targetSection': string;
+  'chat.comments.targetPage': string;
+  'chat.comments.targetArea': string;
   'chat.annotationNotePlaceholder': string;
   'chat.annotationQueue': string;
   'chat.annotationQueueing': string;
@@ -1725,6 +1732,8 @@ export interface Dict {
   'chat.annotationPreviewMissingInk': string;
   'chat.annotationTimeout': string;
   'chat.annotationFailed': string;
+  'chat.annotationProjectCreateFailed': string;
+  'chat.annotationUploadFailed': string;
   'chat.inspect.noEditableTargets': string;
   'chat.inspect.noCommentTargets': string;
   'chat.inspect.editHint': string;
@@ -1978,6 +1987,9 @@ export interface Dict {
   'manualEdit.editableCount': string;
   'manualEdit.hiddenBadge': string;
   'manualEdit.title': string;
+  'manualEdit.fallbackTitle': string;
+  'manualEdit.movePanel': string;
+  'manualEdit.closePanel': string;
   'manualEdit.selectLayer': string;
   'manualEdit.empty': string;
   'manualEdit.noEditableLayers': string;

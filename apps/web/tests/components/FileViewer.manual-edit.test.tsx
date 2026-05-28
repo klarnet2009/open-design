@@ -76,7 +76,7 @@ describe('FileViewer manual edit regressions', () => {
     expect(cancelManualEditPendingStyleSnapshot(otherTargetPending, 'cta', ['fontSize'])).toBe(otherTargetPending);
   });
 
-  it('does not open the edit panel until a target is hovered or selected', async () => {
+  it('opens the page edit panel before a target is hovered or selected', async () => {
     const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
     vi.stubGlobal('fetch', vi.fn(async () =>
       new Response(source, { status: 200, headers: { 'Content-Type': 'text/html' } }),
@@ -89,7 +89,8 @@ describe('FileViewer manual edit regressions', () => {
     );
 
     clickManualTool('manual-edit-mode-toggle');
-    expect(document.querySelector('.manual-edit-right')).toBeNull();
+    expect(document.querySelector('.manual-edit-right')).not.toBeNull();
+    expect(screen.getByText('PAGE')).toBeTruthy();
 
     await hoverManualEditTarget();
     expect(document.querySelector('.manual-edit-right')).not.toBeNull();

@@ -322,7 +322,8 @@ describe('FileViewer manual edit history regressions', () => {
     await waitFor(() => expect(savedSources).toHaveLength(1));
     expect(savedSources[0]).not.toContain('data-od-id="hero"');
     expect(savedSources[0]).toContain('data-od-id="body"');
-    await waitFor(() => expect(screen.queryByTestId('mock-manual-edit-panel')).toBeNull());
+    await waitFor(() => expect(panelState.props?.selectedTarget).toBeNull());
+    expect(screen.getByTestId('mock-manual-edit-panel')).toBeTruthy();
     expect(postMessageSpy).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'od-edit-selected-target', id: null }),
       '*',

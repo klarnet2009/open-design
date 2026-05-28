@@ -73,7 +73,7 @@ export function ManualEditPanel({
   const selectedTargetRef = useRef<ManualEditTarget | null>(selectedTarget);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const targetForInspector = selectedTarget;
-  const panelTitle = targetForInspector ? readableManualEditTargetName(targetForInspector) : 'Edit';
+  const panelTitle = targetForInspector ? readableManualEditTargetName(targetForInspector) : t('manualEdit.fallbackTitle');
   useEffect(() => {
     selectedTargetRef.current = selectedTarget;
   }, [selectedTarget]);
@@ -138,8 +138,8 @@ export function ManualEditPanel({
             <button
               type="button"
               className="manual-edit-drag-handle"
-              aria-label="Move edit panel"
-              title="Move edit panel"
+              aria-label={t('manualEdit.movePanel')}
+              title={t('manualEdit.movePanel')}
               onPointerDown={startPanelDrag}
             >
               <span aria-hidden />
@@ -150,8 +150,8 @@ export function ManualEditPanel({
             <button
               type="button"
               className="manual-edit-titlebar-close"
-              aria-label="Close edit panel"
-              title="Close edit panel"
+              aria-label={t('manualEdit.closePanel')}
+              title={t('manualEdit.closePanel')}
               onClick={onExit}
             >
               <Icon name="close" size={16} />

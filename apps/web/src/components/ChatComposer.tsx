@@ -877,7 +877,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             if (detail.file) {
               const id = await ensureProject();
               if (!id) {
-                ack({ ok: false, message: '无法创建项目，标注未发送' });
+                ack({ ok: false, message: t('chat.annotationProjectCreateFailed') });
                 return;
               }
               setUploading(true);
@@ -926,7 +926,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 const detailText = result.error ? ` (${result.error})` : '';
                 setUploadError(`Attachment upload failed for ${result.failed.length} file(s)${detailText}.`);
                 if (uploaded.length === 0) {
-                  ack({ ok: false, message: '附件上传失败，请重试' });
+                  ack({ ok: false, message: t('chat.annotationUploadFailed') });
                   return;
                 }
               }
