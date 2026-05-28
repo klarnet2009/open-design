@@ -20,10 +20,10 @@ import {
   trackFeedbackSubmitResult,
 } from "../analytics/events";
 import {
-  agentIdToTracking,
+  feedbackAgentProviderIdToTracking,
   modelIdForTracking,
   normalizeCustomReason,
-  type TrackingCliProviderId,
+  type TrackingFeedbackProviderId,
   type TrackingFeedbackReasonCode,
   type TrackingFeedbackRatingWithNone,
   type TrackingProjectKind,
@@ -648,8 +648,8 @@ export function AssistantMessage({
                 runId={message.runId ?? null}
                 assistantMessageId={message.id}
                 producedFileCount={displayedProduced.length}
-                agentProviderId={agentIdToTracking(message.agentId)}
-                modelId={modelIdForTracking(assistantModelDetail(message))}
+                agentProviderId={feedbackAgentProviderIdToTracking(message.agentId) ?? 'other'}
+                modelId={modelIdForTracking(assistantFeedbackModelId(message))}
                 hasDesignSystemContext={hasDesignSystemContext}
                 footerProps={{
                   streaming,
@@ -871,7 +871,7 @@ function AssistantFeedback({
   conversationId: string | null;
   runId: string | null;
   assistantMessageId: string;
-  agentProviderId: TrackingCliProviderId;
+  agentProviderId: TrackingFeedbackProviderId;
   modelId: string;
   producedFileCount: number;
 }) {

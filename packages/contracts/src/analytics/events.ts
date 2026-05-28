@@ -1334,7 +1334,7 @@ export interface AssistantFeedbackButtonClickProps {
   conversation_id: string | null;
   assistant_message_id: string;
   run_id: string;
-  agent_provider_id: TrackingCliProviderId;
+  agent_provider_id: TrackingFeedbackProviderId;
   model_id: string;
   // For `clear_feedback_rating`, `rating` carries the rating that was
   // cleared (not the previous-before-clear value, which lives in
@@ -1355,7 +1355,7 @@ export interface AssistantFeedbackReasonSubmitClickProps {
   conversation_id: string | null;
   assistant_message_id: string;
   run_id: string;
-  agent_provider_id: TrackingCliProviderId;
+  agent_provider_id: TrackingFeedbackProviderId;
   model_id: string;
   rating: 'positive' | 'negative';
   reason?: string;
@@ -1866,7 +1866,7 @@ export interface FeedbackSubmitResultProps {
   conversation_id: string | null;
   assistant_message_id: string;
   run_id: string;
-  agent_provider_id: TrackingCliProviderId;
+  agent_provider_id: TrackingFeedbackProviderId;
   model_id: string;
   rating: 'positive' | 'negative';
   reason?: string;
