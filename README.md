@@ -11,6 +11,8 @@ Agent-native, local-first product-design platform. Native desktop app for macOS 
   <a href="https://open-design.ai/"><img alt="⬇ Download for macOS" src="https://img.shields.io/badge/⬇%20Download-macOS-000?style=for-the-badge&logo=apple&logoColor=white&labelColor=000" /></a>
   <a href="https://open-design.ai/"><img alt="⬇ Download for Windows" src="https://img.shields.io/badge/⬇%20Download-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white&labelColor=0078D6" /></a>
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="⬇ Download for Linux" src="https://img.shields.io/badge/⬇%20Download-Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black&labelColor=FCC624" /></a>
+  <a href="https://x.com/nexudotio"><img alt="Follow on X" src="https://img.shields.io/badge/Follow-%40nexudotio-000?style=for-the-badge&logo=x&logoColor=white&labelColor=000" /></a>
+  <a href="https://discord.gg/qhbcCH8Am4"><img alt="Join Discord" src="https://img.shields.io/badge/Join-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white&labelColor=5865F2" /></a>
 </p>
 
 <p align="center">
@@ -25,7 +27,15 @@ Agent-native, local-first product-design platform. Native desktop app for macOS 
 > [!IMPORTANT]
 > ### 🔥 Open Design 0.8.0 is here. Design's old world ends here. Help us build the new one.
 >
-> One folder upgrades anything — Plugins, Skills, Design Systems — into a reusable, agent-runnable artifact. New Skill registry, refreshed `DESIGN.md` Design Systems, brand-grade templates, and a clean upgrade path for `0.7.x` projects.
+> One folder upgrades anything — **[Plugins](plugins/)**, **[Skills](skills/)**, **[Design Systems](design-systems/)** — into a reusable, agent-runnable artifact. New Skill registry, refreshed `DESIGN.md` Design Systems, brand-grade templates, and a clean upgrade path for `0.7.x` projects.
+>
+> **🧩 Call for plugin authors.** 0.8.0 lands the [plugin marketplace foundation](plugins/spec/SPEC.md) with **400+ official plugins** across [scenarios](plugins/_official/scenarios/), [image templates](plugins/_official/image-templates/), [video templates](plugins/_official/video-templates/), [atoms](plugins/_official/atoms/), [design systems](plugins/_official/design-systems/) and [examples](plugins/_official/examples/). A plugin can:
+>   - 🎨 Ship a **full design brief** (landing page, pitch deck, OKR scorecard) — see [`od-default`](plugins/_official/scenarios/od-default/) · [`od-design-refine`](plugins/_official/scenarios/od-design-refine/) · [`od-new-generation`](plugins/_official/scenarios/od-new-generation/).
+>   - 🔁 **Migrate Figma / Pencil → React / Next / Vue** — see [`od-figma-migration`](plugins/_official/scenarios/od-figma-migration/) · [`od-react-export`](plugins/_official/scenarios/od-react-export/) · [`od-nextjs-export`](plugins/_official/scenarios/od-nextjs-export/).
+>   - 🛠️ **Refresh an existing codebase to a brand** — point at a git repo + `DESIGN.md`, get a PR. See [`od-code-migration`](plugins/_official/scenarios/od-code-migration/).
+>   - 🎬 **Generate media** — image / video / audio batches via [`od-media-generation`](plugins/_official/scenarios/od-media-generation/).
+>
+> **Author your own** → spec at [`plugins/spec/SPEC.md`](plugins/spec/SPEC.md) · agent-dev guide at [`plugins/spec/AGENT-DEVELOPMENT.md`](plugins/spec/AGENT-DEVELOPMENT.md) · contributing guide at [`plugins/spec/CONTRIBUTING.md`](plugins/spec/CONTRIBUTING.md). Drop a folder under [`plugins/_official/`](plugins/_official/) or [`plugins/community/`](plugins/community/), open a PR — your plugin ships in the next release.
 >
 > → [**Read the announcement & changelog**](https://github.com/nexu-io/open-design/discussions/1727) · [**0.8.0 release**](https://github.com/nexu-io/open-design/releases) · runs side-by-side with your current `0.7`.
 
@@ -398,16 +408,37 @@ Re-import the library via [`scripts/sync-design-systems.ts`](scripts/sync-design
 
 ## Plugins
 
-**400+ plugins** ship under [`plugins/_official/`](plugins/) covering: `scenarios` (full design briefs), `image-templates`, `video-templates`, `design-systems`, `atoms` (reusable UI fragments), and `examples`. Each plugin is a folder with `plugin.json` + manifest + bundled assets.
+**400+ plugins** ship under [`plugins/_official/`](plugins/_official/). Each plugin is a folder with `plugin.json` + manifest + bundled assets — jump straight to a category to browse:
 
-Plugins can:
+| Category | Count | What's in it |
+|---|---|---|
+| [`scenarios/`](plugins/_official/scenarios/) | 11 | Full design briefs — [`od-default`](plugins/_official/scenarios/od-default/), [`od-design-refine`](plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](plugins/_official/scenarios/od-code-migration/), [`od-react-export`](plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](plugins/_official/scenarios/od-plugin-authoring/) |
+| [`image-templates/`](plugins/_official/image-templates/) | 45 | One-shot image prompts — editorial, cinematic, product, portrait |
+| [`video-templates/`](plugins/_official/video-templates/) | 50 | HyperFrames / Seedance / Veo motion templates |
+| [`design-systems/`](plugins/_official/design-systems/) | 142 | Brand `DESIGN.md` bundles wrapped as plugins |
+| [`atoms/`](plugins/_official/atoms/) | 13 | Reusable UI fragments (button, hero, KPI tile) |
+| [`examples/`](plugins/_official/examples/) | 140 | Reference outputs to remix |
 
-- **Run inside any coding agent** — Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi… via the same Skill protocol the agent already knows.
-- **Migrate Figma / Pencil workflows** → React, Next.js, or Vue source.
-- **Refresh an existing codebase to a brand** — point the plugin at a `git` repo + `DESIGN.md`, get a PR.
-- **Persist custom workflows** — your team's reusable templates live next to the shipped ones.
+Plus [`plugins/community/`](plugins/community/) for community-authored plugins and [`plugins/registry/`](plugins/registry/) for the registry-publish flow.
 
-Plugin spec, manifest schema, and the **for-agent / for-human** dev guide → [`plugins/spec/`](plugins/spec/) and [`plugins/README.md`](plugins/README.md).
+### What a plugin can do
+
+- 🤖 **Run inside any coding agent** — [Claude Code](docs/agent-adapters.md), Codex, Cursor, Copilot, [OpenClaw](https://github.com/openclaw/openclaw), [Antigravity](https://antigravity.google), Hermes, Kimi… via the same Skill protocol the agent already knows.
+- 🔁 **Migrate Figma / Pencil workflows** → React, Next.js, or Vue source. See [`od-figma-migration`](plugins/_official/scenarios/od-figma-migration/).
+- 🛠️ **Refresh an existing codebase to a brand** — point the plugin at a `git` repo + `DESIGN.md`, get a PR. See [`od-code-migration`](plugins/_official/scenarios/od-code-migration/).
+- 💾 **Persist custom workflows** — your team's reusable templates live next to the shipped ones.
+
+### Author your own
+
+Read these in order:
+
+1. [`plugins/spec/SPEC.md`](plugins/spec/SPEC.md) — manifest schema, file layout, runtime contract.
+2. [`plugins/spec/AGENT-DEVELOPMENT.md`](plugins/spec/AGENT-DEVELOPMENT.md) — building a plugin *with* a coding agent.
+3. [`plugins/spec/CONTRIBUTING.md`](plugins/spec/CONTRIBUTING.md) — the PR bar for a new plugin.
+4. [`plugins/spec/PUBLISHING-REGISTRIES.md`](plugins/spec/PUBLISHING-REGISTRIES.md) — publishing to the official / community registry.
+5. [`plugins/spec/examples/`](plugins/spec/examples/) — minimum-viable templates to copy.
+
+Then drop a folder under [`plugins/community/`](plugins/community/), open a PR. Plugin registry endpoint: `GET /api/plugins`. Plugin readme (catalog overview) → [`plugins/README.md`](plugins/README.md) ([简体中文](plugins/README.zh-CN.md)).
 
 ---
 
@@ -500,7 +531,7 @@ Open Design moves because contributors — designers, engineers, prompt authors 
 |---|---|---|
 | A new **Skill** | Drop a folder with `SKILL.md` + `assets/` + `references/` | [`skills/`](skills/) · spec at [`docs/skills-protocol.md`](docs/skills-protocol.md) |
 | A new **Design System** | Drop `DESIGN.md` using the 9-section schema | [`design-systems/<brand>/`](design-systems/) |
-| A new **Plugin** | Drop `plugin.json` + manifest under the right category | [`plugins/_official/`](plugins/) · spec at [`plugins/spec/`](plugins/spec/) |
+| A new **Plugin** | Drop `plugin.json` + manifest under a category folder | [`plugins/community/`](plugins/community/) · spec at [`plugins/spec/SPEC.md`](plugins/spec/SPEC.md) · agent-dev guide at [`plugins/spec/AGENT-DEVELOPMENT.md`](plugins/spec/AGENT-DEVELOPMENT.md) |
 | Support a new **coding-agent CLI** | One adapter entry + stream parser | [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) |
 | Fix a bug or polish UI | Browse the [`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) label | [Issues →](https://github.com/nexu-io/open-design/issues) |
 | Translate the docs | Update one of the `README.<lang>.md` files | [`TRANSLATIONS.md`](TRANSLATIONS.md) |
