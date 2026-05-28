@@ -13153,7 +13153,8 @@ export async function startServer({
     };
     let server;
     try {
-      server = app.listen(port, host, () => {
+      server = app.listen(port, host);
+      server.once('listening', () => {
         // Widen the between-request idle window so kept-alive sockets
         // belonging to chat/SSE clients survive the gaps between bursts.
         //
@@ -13176,10 +13177,8 @@ export async function startServer({
         //
         // `headersTimeout` must exceed `keepAliveTimeout` per the Node
         // docs; otherwise a slow-loris client can stall request parsing.
-        if (server) {
-          server.keepAliveTimeout = 120_000;
-          server.headersTimeout = 125_000;
-        }
+        server.keepAliveTimeout = 120_000;
+        server.headersTimeout = 125_000;
         const address = server.address();
         // `address()` can in theory return `string | AddressInfo | null`. For
         // a TCP listener it's always `AddressInfo` with a `.port` — the guard
