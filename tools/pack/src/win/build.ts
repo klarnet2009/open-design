@@ -69,7 +69,8 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
   await runPhase("target-artifact-cleanup", async () => {
     if (!hasNsisTarget) {
       await rm(paths.setupPath, { force: true });
-      await rm(paths.installerPayloadPath, { force: true });
+      await rm(paths.installerBasePayloadPath, { force: true });
+      await rm(paths.installerOverlayPayloadPath, { force: true });
       await rm(paths.latestYmlPath, { force: true });
     }
     if (!hasZipTarget) {

@@ -37,9 +37,12 @@ if (Test-Path $packagedAppRoot) {
 
 $priorityByNode = @{
   "win.electron-builder-dir" = 0
-  "win.workspace-build" = 1
-  "win.resource-tree" = 2
-  "win.workspace-tarballs" = 3
+  "win.nsis-payload-base" = 1
+  "win.nsis-payload-overlay" = 2
+  "win.nsis-installer" = 3
+  "win.workspace-build" = 4
+  "win.resource-tree" = 5
+  "win.workspace-tarballs" = 6
 }
 
 $entries = Get-ChildItem -Path $entryRoot -Directory -Recurse |

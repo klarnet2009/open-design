@@ -63,7 +63,8 @@ export type WinPaths = {
   exePath: string;
   installDir: string;
   installedExePath: string;
-  installerPayloadPath: string;
+  installerBasePayloadPath: string;
+  installerOverlayPayloadPath: string;
   installerScriptPath: string;
   publicDesktopShortcutPath: string;
   latestYmlPath: string;

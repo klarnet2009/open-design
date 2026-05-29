@@ -25,8 +25,22 @@ const NSIS_LANGUAGES = [
   { macro: "LANG_PERSIAN", name: "Persian" },
 ] as const;
 
+const WIN_NSIS_OVERLAY_RELATIVE_PATHS = [
+  `${PRODUCT_NAME}.exe`,
+  "resources/app/package.json",
+  "resources/open-design-config.json",
+] as const;
+
 function escapeNsisString(value: string): string {
   return value.replace(/\$/g, "$$").replace(/"/g, '$\\"').replace(/\r?\n/g, "$\\r$\\n");
+}
+
+function normalizeArchivePath(relativePath: string): string {
+  return relativePath.split("/").join("\\");
+}
+
+export function resolveWinNsisOverlayRequiredPaths(): string[][] {
+  return WIN_NSIS_OVERLAY_RELATIVE_PATHS.map((relativePath) => [relativePath]);
 }
 
 function createNsisLanguageInserts(): string {
@@ -186,8 +200,11 @@ RequestExecutionLevel user
 !ifndef OUTPUT_EXE
   !error "OUTPUT_EXE define is required"
 !endif
-!ifndef PAYLOAD_7Z
-  !error "PAYLOAD_7Z define is required"
+!ifndef PAYLOAD_BASE_7Z
+  !error "PAYLOAD_BASE_7Z define is required"
+!endif
+!ifndef PAYLOAD_OVERLAY_7Z
+  !error "PAYLOAD_OVERLAY_7Z define is required"
 !endif
 !ifndef SEVEN_Z_EXE
   !error "SEVEN_Z_EXE define is required"
@@ -627,19 +644,31 @@ Section "Install"
 prepare_install_dir:
   InitPluginsDir
   SetOutPath "$PLUGINSDIR"
-  File "/oname=$PLUGINSDIR\\payload.7z" "\${PAYLOAD_7Z}"
+  File "/oname=$PLUGINSDIR\\payload-base.7z" "\${PAYLOAD_BASE_7Z}"
+  File "/oname=$PLUGINSDIR\\payload-overlay.7z" "\${PAYLOAD_OVERLAY_7Z}"
   File "/oname=$PLUGINSDIR\\7z.exe" "\${SEVEN_Z_EXE}"
   File "/oname=$PLUGINSDIR\\7z.dll" "\${SEVEN_Z_DLL}"
 
   CreateDirectory "$INSTDIR"
-  Push "payload extraction start"
+  Push "payload base extraction start"
   Call LogInstallerEvent
-  nsExec::ExecToLog '"$PLUGINSDIR\\7z.exe" x -y "$PLUGINSDIR\\payload.7z" "-o$INSTDIR"'
+  nsExec::ExecToLog '"$PLUGINSDIR\\7z.exe" x -y "$PLUGINSDIR\\payload-base.7z" "-o$INSTDIR"'
   Pop $0
-  Push "payload extraction exit=$0"
+  Push "payload base extraction exit=$0"
   Call LogInstallerEvent
   \${If} $0 != "0"
-    DetailPrint "7z extraction failed with exit code $0"
+    DetailPrint "base payload extraction failed with exit code $0"
+    Abort
+  \${EndIf}
+
+  Push "payload overlay extraction start"
+  Call LogInstallerEvent
+  nsExec::ExecToLog '"$PLUGINSDIR\\7z.exe" x -y "$PLUGINSDIR\\payload-overlay.7z" "-o$INSTDIR"'
+  Pop $0
+  Push "payload overlay extraction exit=$0"
+  Call LogInstallerEvent
+  \${If} $0 != "0"
+    DetailPrint "overlay payload extraction failed with exit code $0"
     Abort
   \${EndIf}
 
@@ -703,12 +732,11 @@ SectionEnd
   await writeFile(paths.installerScriptPath, `\uFEFF${script}`, "utf8");
 }
 
-export async function buildCustomWinNsisInstaller(
-  config: ToolPackConfig,
-  paths: WinPaths,
-  builtApp: WinBuiltAppManifest,
-): Promise<WinPackTiming[]> {
+function assertWinInstallerBuildPlatform(): void {
   if (process.platform !== "win32") throw new Error("Windows installer build must run on Windows");
+}
+
+function createWinNsisTimingHelpers() {
   const timings: WinPackTiming[] = [];
   const runSegment = async <T>(
     phase: string,
@@ -757,6 +785,82 @@ export async function buildCustomWinNsisInstaller(
       throw error;
     }
   };
+  return { runExecSegment, runSegment, timings };
+}
+
+async function buildWinNsisPayloadArchive(
+  builtApp: WinBuiltAppManifest,
+  outputPath: string,
+  phasePrefix: string,
+  archiveArgs: string[],
+): Promise<WinPackTiming[]> {
+  assertWinInstallerBuildPlatform();
+  const { runExecSegment, runSegment, timings } = createWinNsisTimingHelpers();
+
+  await runSegment(`${phasePrefix}:prepare`, async () => {
+    await mkdir(dirname(outputPath), { recursive: true });
+    await rm(outputPath, { force: true });
+  });
+  const payloadSnapshotDetails: Record<string, unknown> = {};
+  await runSegment(`${phasePrefix}:input-snapshot`, async () => {
+    Object.assign(payloadSnapshotDetails, await collectPathSnapshot(builtApp.unpackedRoot));
+  }, payloadSnapshotDetails);
+  await runSegment(phasePrefix, async () => {
+    await runExecSegment(
+      `${phasePrefix}:process`,
+      winResources.sevenZipExe,
+      archiveArgs,
+      { cwd: builtApp.unpackedRoot, outputPath },
+    );
+  });
+  return timings;
+}
+
+export async function buildWinNsisBasePayload(
+  paths: WinPaths,
+  builtApp: WinBuiltAppManifest,
+): Promise<WinPackTiming[]> {
+  return buildWinNsisPayloadArchive(
+    builtApp,
+    paths.installerBasePayloadPath,
+    "nsis:payload-base-7z",
+    [
+      "a",
+      "-t7z",
+      "-mx=1",
+      "-ms=off",
+      paths.installerBasePayloadPath,
+      ".\\*",
+      ...WIN_NSIS_OVERLAY_RELATIVE_PATHS.map((relativePath) => `-x!${normalizeArchivePath(relativePath)}`),
+    ],
+  );
+}
+
+export async function buildWinNsisOverlayPayload(
+  paths: WinPaths,
+  builtApp: WinBuiltAppManifest,
+): Promise<WinPackTiming[]> {
+  return buildWinNsisPayloadArchive(
+    builtApp,
+    paths.installerOverlayPayloadPath,
+    "nsis:payload-overlay-7z",
+    [
+      "a",
+      "-t7z",
+      "-mx=1",
+      "-ms=off",
+      paths.installerOverlayPayloadPath,
+      ...WIN_NSIS_OVERLAY_RELATIVE_PATHS.map((relativePath) => `.\\${normalizeArchivePath(relativePath)}`),
+    ],
+  );
+}
+
+export async function buildCustomWinNsisInstaller(
+  config: ToolPackConfig,
+  paths: WinPaths,
+): Promise<WinPackTiming[]> {
+  assertWinInstallerBuildPlatform();
+  const { runExecSegment, runSegment, timings } = createWinNsisTimingHelpers();
   const makensisCommand = await runSegment("nsis:resolve-makensis", async () => resolveMakensisCommand(config));
   const packagedVersion = await runSegment("nsis:read-version", async () => readPackagedVersion(config));
   await runSegment("nsis:ensure-persian-language", async () => {
@@ -764,22 +868,8 @@ export async function buildCustomWinNsisInstaller(
   });
 
   await runSegment("nsis:prepare", async () => {
-    await mkdir(dirname(paths.installerPayloadPath), { recursive: true });
     await mkdir(dirname(paths.setupPath), { recursive: true });
-    await rm(paths.installerPayloadPath, { force: true });
     await rm(paths.setupPath, { force: true });
-  });
-  const payloadSnapshotDetails: Record<string, unknown> = {};
-  await runSegment("nsis:payload-input-snapshot", async () => {
-    Object.assign(payloadSnapshotDetails, await collectPathSnapshot(builtApp.unpackedRoot));
-  }, payloadSnapshotDetails);
-  await runSegment("nsis:payload-7z", async () => {
-    await runExecSegment(
-      "nsis:payload-7z:process",
-      winResources.sevenZipExe,
-      ["a", "-t7z", "-mx=1", "-ms=off", paths.installerPayloadPath, ".\\*"],
-      { cwd: builtApp.unpackedRoot, outputPath: paths.installerPayloadPath },
-    );
   });
   await runSegment("nsis:write-script", async () => {
     await writeInstallerScript(config, paths);
@@ -792,7 +882,8 @@ export async function buildCustomWinNsisInstaller(
         "/V2",
         `/DAPP_VERSION=${packagedVersion}`,
         `/DOUTPUT_EXE=${paths.setupPath}`,
-        `/DPAYLOAD_7Z=${paths.installerPayloadPath}`,
+        `/DPAYLOAD_BASE_7Z=${paths.installerBasePayloadPath}`,
+        `/DPAYLOAD_OVERLAY_7Z=${paths.installerOverlayPayloadPath}`,
         `/DSEVEN_Z_EXE=${winResources.sevenZipExe}`,
         `/DSEVEN_Z_DLL=${winResources.sevenZipDll}`,
         `/DAPP_ICON=${paths.winIconPath}`,

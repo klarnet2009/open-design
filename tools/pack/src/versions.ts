@@ -13,6 +13,11 @@ export async function readRuntimeAppVersion(config: ToolPackConfig): Promise<str
   return packageJson.version;
 }
 
+export function versionCoreForAppVersion(appVersion: string): string {
+  const match = /^(\d+\.\d+\.\d+)(?:[-.].*)?$/.exec(appVersion);
+  return match?.[1] ?? appVersion;
+}
+
 export function electronBuilderVersionForAppVersion(appVersion: string): string {
   const nightly = /^(\d+\.\d+\.\d+)\.nightly\.(\d+)$/i.exec(appVersion);
   if (nightly?.[1] != null && nightly[2] != null) return `${nightly[1]}-nightly.${nightly[2]}`;
