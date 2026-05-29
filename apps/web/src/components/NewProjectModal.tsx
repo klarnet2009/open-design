@@ -9,8 +9,10 @@
 // clicks the backdrop / Esc.
 
 import { useEffect, useRef, useState } from 'react';
+import { motion } from 'motion/react';
 import type { ConnectorDetail } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
+import { modalOverlay, modalContent } from '../motion';
 import type {
   DesignSystemSummary,
   MediaProviderCredentials,
@@ -119,7 +121,7 @@ export function NewProjectModal({
   }
 
   return (
-    <div
+    <motion.div
       className="new-project-modal-backdrop"
       role="dialog"
       aria-modal="true"
@@ -128,8 +130,18 @@ export function NewProjectModal({
       onClick={(e) => {
         if (e.target === e.currentTarget && !creating) onClose();
       }}
+      variants={modalOverlay}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
     >
-      <div className="new-project-modal">
+      <motion.div
+        className="new-project-modal"
+        variants={modalContent}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+      >
         <header className="new-project-modal__head">
           <h2 className="new-project-modal__title">New project</h2>
           <button
@@ -176,7 +188,7 @@ export function NewProjectModal({
             </div>
           ) : null}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

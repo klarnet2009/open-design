@@ -58,6 +58,7 @@ import {
   parseSketchWorkspaceDocument,
   type SketchItem,
 } from './sketch-model';
+import { AnimatePresence } from 'motion/react';
 
 interface Props {
   projectId: string;
@@ -1097,30 +1098,34 @@ export function FileWorkspace({
         style={{ display: 'none' }}
         onChange={handleFilePicked}
       />
-      {showPasteDialog ? (
-        <PasteTextDialog
-          onClose={() => setShowPasteDialog(false)}
-          onSave={async (name, content) => {
-            setShowPasteDialog(false);
-            const file = await writeProjectTextFile(projectId, name, content);
-            if (file) {
-              await onRefreshFiles();
-              openFile(file.name);
-            }
-          }}
-        />
-      ) : null}
-      {quickSwitcherOpen ? (
-        <QuickSwitcher
-          projectId={projectId}
-          files={visibleFiles}
-          onOpenFile={(name) => {
-            openFile(name);
-            setQuickSwitcherOpen(false);
-          }}
-          onClose={() => setQuickSwitcherOpen(false)}
-        />
-      ) : null}
+      <AnimatePresence>
+        {showPasteDialog ? (
+          <PasteTextDialog
+            onClose={() => setShowPasteDialog(false)}
+            onSave={async (name, content) => {
+              setShowPasteDialog(false);
+              const file = await writeProjectTextFile(projectId, name, content);
+              if (file) {
+                await onRefreshFiles();
+                openFile(file.name);
+              }
+            }}
+          />
+        ) : null}
+      </AnimatePresence>
+      <AnimatePresence>
+        {quickSwitcherOpen ? (
+          <QuickSwitcher
+            projectId={projectId}
+            files={visibleFiles}
+            onOpenFile={(name) => {
+              openFile(name);
+              setQuickSwitcherOpen(false);
+            }}
+            onClose={() => setQuickSwitcherOpen(false)}
+          />
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

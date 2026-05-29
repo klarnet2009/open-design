@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { motion } from 'motion/react';
 import { useT } from '../i18n';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { exportAsHtml, exportAsPdf, exportAsZip, openSandboxedPreviewInNewTab } from '../runtime/exports';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import { Icon } from './Icon';
+import { modalOverlay, modalContent } from '../motion';
 
 export interface PreviewView {
   id: string;
@@ -457,8 +459,23 @@ export function PreviewModal({
   const canOpenTemplateShareMenu = canExportFiles || Boolean(previewShareUrl);
 
   return (
-    <div className="ds-modal-backdrop" role="dialog" aria-modal="true" aria-label={`${title} preview`}>
-      <div className={`ds-modal ${fullscreen ? 'ds-modal-fullscreen' : ''}`}>
+    <motion.div
+      className="ds-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${title} preview`}
+      variants={modalOverlay}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+    >
+      <motion.div
+        className={`ds-modal ${fullscreen ? 'ds-modal-fullscreen' : ''}`}
+        variants={modalContent}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+      >
         <header className="ds-modal-header">
           <div className="ds-modal-header-top">
             <div className="ds-modal-title-block">
@@ -861,7 +878,7 @@ export function PreviewModal({
             </aside>
           ) : null}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

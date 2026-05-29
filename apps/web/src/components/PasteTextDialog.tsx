@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { motion } from 'motion/react';
 import { useT } from '../i18n';
+import { modalOverlay, modalContent } from '../motion';
 
 interface Props {
   onSave: (name: string, content: string) => void;
@@ -19,8 +21,22 @@ export function PasteTextDialog({ onSave, onClose }: Props) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <motion.div
+      className="modal-backdrop"
+      onClick={onClose}
+      variants={modalOverlay}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+    >
+      <motion.div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        variants={modalContent}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+      >
         <h2>{t('pasteDialog.title')}</h2>
         <p className="hint">{t('pasteDialog.hint')}</p>
         <label>
@@ -48,8 +64,8 @@ export function PasteTextDialog({ onSave, onClose }: Props) {
             {t('pasteDialog.save')}
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 

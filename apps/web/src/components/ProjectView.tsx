@@ -9,6 +9,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import { AnimatePresence } from 'motion/react';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
 import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
@@ -4555,14 +4556,16 @@ export function ProjectView({
           onCommentModeChange={setCommentInspectorActive}
         />
       </div>
-      {projectActionsToast ? (
-        <Toast
-          message={projectActionsToast.message}
-          details={projectActionsToast.details}
-          code={projectActionsToast.code}
-          onDismiss={() => setProjectActionsToast(null)}
-        />
-      ) : null}
+      <AnimatePresence>
+        {projectActionsToast ? (
+          <Toast
+            message={projectActionsToast.message}
+            details={projectActionsToast.details}
+            code={projectActionsToast.code}
+            onDismiss={() => setProjectActionsToast(null)}
+          />
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

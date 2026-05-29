@@ -18,6 +18,7 @@ import type {
 	ProjectFile,
 	SkillSummary,
 } from "../types";
+import { AnimatePresence } from "motion/react";
 import { Icon } from "./Icon";
 import { isDesignSystemProject, isPublishedDesignSystemProject } from "./design-system-project";
 import { LiveArtifactBadges } from "./LiveArtifactBadges";
@@ -992,13 +993,15 @@ export function DesignsTab({
 					</div>
 				</div>
 			) : null}
-			{deleteToast ? (
-				<Toast
-					key={deleteToast.id}
-					message={deleteToast.message}
-					onDismiss={() => setDeleteToast(null)}
-				/>
-			) : null}
+			<AnimatePresence>
+				{deleteToast ? (
+					<Toast
+						key={deleteToast.id}
+						message={deleteToast.message}
+						onDismiss={() => setDeleteToast(null)}
+					/>
+				) : null}
+			</AnimatePresence>
 		</div>
 	);
 }
