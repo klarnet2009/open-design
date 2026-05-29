@@ -1,2 +1,0 @@
-{"type":"meta","source":{"provider":"langfuse","trace_id":"2e526bda-1899-4e70-a541-af8102ea9f9d","project_id":"cmov9fhj905kaad06h8to8rqu"},"agent":"claude","model":"sonnet","outcome":"failed","duration_ms":5924,"tool_call_count":0,"error_count":0,"tags":["agent:claude","client:desktop","model:sonnet","open-design","os:darwin","project:proj-001","skill:agent-browser"],"user_input":"继续","timestamp":"2026-05-28T16:32:50.119Z","session_id":"3a3aeb61-2638-4971-8181-75a40b800eb9"}
-{"type":"report","content":""}

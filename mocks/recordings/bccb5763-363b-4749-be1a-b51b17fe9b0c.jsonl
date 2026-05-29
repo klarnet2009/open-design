@@ -1,2 +1,0 @@
-{"type":"meta","source":{"provider":"langfuse","trace_id":"bccb5763-363b-4749-be1a-b51b17fe9b0c","project_id":"cmov9fhj905kaad06h8to8rqu"},"agent":"claude","outcome":"failed","duration_ms":795,"tool_call_count":0,"error_count":0,"tags":["agent:claude","client:desktop","open-design","os:win32","project:proj-001"],"user_input":"你能设计App页面么","timestamp":"2026-05-28T15:45:48.628Z","session_id":"97d627b9-c997-48c4-b976-1be8c982c2f4"}
-{"type":"report","content":""}

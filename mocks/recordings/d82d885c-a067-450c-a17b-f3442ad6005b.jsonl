@@ -1,2 +1,0 @@
-{"type":"meta","source":{"provider":"langfuse","trace_id":"d82d885c-a067-450c-a17b-f3442ad6005b","project_id":"cmov9fhj905kaad06h8to8rqu"},"agent":"claude","model":"sonnet","outcome":"failed","duration_ms":4607,"tool_call_count":0,"error_count":1,"total_tokens":0,"tags":["agent:claude","client:desktop","model:sonnet","open-design","os:darwin","project:proj-001"],"user_input":"Est-ce que c'est bon ?","timestamp":"2026-05-28T16:34:07.220Z","session_id":"fd3e2909-2b97-4014-a58b-4a6a331a5c13"}
-{"type":"report","content":"Prompt is too long"}

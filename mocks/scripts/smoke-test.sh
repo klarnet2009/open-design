@@ -15,6 +15,15 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 MOCKS="$(cd "$HERE/.." && pwd -P)"
 TRACE_ID="${SYNCLO_EXPLORE_MOCK_SMOKE_TRACE:-04097377}"   # the 17-tool claude session
 
+# Ensure recordings are on disk — the corpus is hosted on R2 and fetched
+# on demand. If nothing's been pulled yet (or only a few are), run the
+# fetcher so smoke covers the full agent matrix.
+if ! ls "$MOCKS/recordings"/*.jsonl >/dev/null 2>&1; then
+  echo "no recordings found — fetching from R2 first..."
+  bash "$HERE/fetch-recordings.sh" >/dev/null
+  echo
+fi
+
 export PATH="$MOCKS/bin:$PATH"
 export SYNCLO_EXPLORE_MOCK_TRACE="$TRACE_ID"
 export SYNCLO_EXPLORE_MOCK_NO_DELAY=1

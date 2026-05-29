@@ -1,2 +1,0 @@
-{"type":"meta","source":{"provider":"langfuse","trace_id":"bf4678a2-5510-48fd-b20d-999687c54b12","project_id":"cmov9fhj905kaad06h8to8rqu"},"agent":"antigravity","model":"gemini-3.5-flash","outcome":"failed","duration_ms":952,"tool_call_count":0,"error_count":0,"tags":["agent:antigravity","client:desktop","model:gemini-3.5-flash","open-design","os:darwin","project:proj-001"],"user_input":"你能做什么？教教我。","timestamp":"2026-05-28T16:35:02.214Z","session_id":"4131bd71-386d-4c2d-b8a4-45c5014c5a58"}
-{"type":"report","content":""}

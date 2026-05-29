@@ -1,0 +1,93 @@
+# Pushes new mock recordings from mocks/recordings-staging/ to the
+# Cloudflare R2 bucket `open-design-mocks`, then updates mocks/manifest.json
+# (in repo + in R2) and clears the staging directory.
+#
+# Why a workflow and not a local script: R2 *write* credentials are stored
+# as repo secrets and never leave CI, so no maintainer's laptop has the
+# ability to push (or accidentally overwrite) prod data. Read remains public
+# via the r2.dev URL.
+#
+# Trigger: push to main that touches mocks/recordings-staging/**.
+# After running, the workflow commits the updated manifest + cleaned
+# staging dir back to main with a [skip ci] tag.
+
+name: sync-mocks-to-r2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mocks/recordings-staging/**'
+      - 'mocks/scripts/upload-to-r2.mjs'
+      - 'mocks/scripts/lib/manifest-utils.mjs'
+  # Manual re-run knob — useful if a previous run failed mid-flight and
+  # left staging files in repo.
+  workflow_dispatch:
+
+concurrency:
+  # Serialize all R2 mutation. Two parallel runs touching the same
+  # manifest would race and one would lose its entries.
+  group: r2-mocks-upload
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # we push the updated manifest + staging cleanup back
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          # Need a real ref (not detached) so the post-upload commit
+          # can be pushed back.
+          ref: ${{ github.ref }}
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Quick gate — anything actually staged?
+        id: gate
+        run: |
+          shopt -s nullglob
+          staged=(mocks/recordings-staging/*.jsonl)
+          echo "count=${#staged[@]}" >> "$GITHUB_OUTPUT"
+          if [ "${#staged[@]}" -eq 0 ]; then
+            echo "No staged recordings — nothing to do."
+          fi
+
+      - name: Set up Node
+        if: steps.gate.outputs.count != '0'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install wrangler
+        if: steps.gate.outputs.count != '0'
+        run: npm install --no-save --no-audit --no-fund wrangler@4.93.1
+
+      - name: Upload to R2 + update manifest
+        if: steps.gate.outputs.count != '0'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          export PATH="$PWD/node_modules/.bin:$PATH"
+          node mocks/scripts/upload-to-r2.mjs
+
+      - name: Commit updated manifest + clean staging
+        if: steps.gate.outputs.count != '0'
+        run: |
+          git config user.name  'open-design-bot'
+          git config user.email 'bot@open-design.local'
+          git add mocks/manifest.json mocks/recordings-staging/
+          if git diff --cached --quiet; then
+            echo "no changes to commit"
+            exit 0
+          fi
+          # [skip ci] prevents OD's own CI re-running on this bot commit.
+          # Workflow paths filter already excludes manifest.json changes
+          # from re-triggering this workflow.
+          git commit -m "mocks: sync ${{ steps.gate.outputs.count }} recordings to R2 [skip ci]"
+          git push origin HEAD:${{ github.ref_name }}

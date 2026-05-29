@@ -1,2 +1,0 @@
-{"type":"meta","source":{"provider":"langfuse","trace_id":"15ccb8f8-177b-4db4-b8bb-2998d4c32881","project_id":"cmov9fhj905kaad06h8to8rqu"},"agent":"gemini","model":"gemini-3-pro-preview","outcome":"failed","duration_ms":32460,"tool_call_count":0,"error_count":0,"total_tokens":0,"tags":["agent:gemini","client:desktop","model:gemini-3-pro-preview","open-design","os:darwin","project:proj-001"],"user_input":"continue please","timestamp":"2026-05-28T16:31:19.675Z","session_id":"1ee7c118-e305-4914-a459-10d56e321b4a"}
-{"type":"report","content":""}

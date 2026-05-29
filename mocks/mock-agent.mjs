@@ -96,8 +96,14 @@ async function main() {
   const picked = await pickRecording({ prompt });
   if (!picked) {
     process.stderr.write(
-      'mock-agent: no recordings available under ./recordings/.\n' +
-      'Set SYNCLO_EXPLORE_MOCK_RECORDINGS_DIR to override the path.\n',
+      'mock-agent: no recordings on disk yet.\n' +
+      'The recording corpus is hosted on Cloudflare R2 (see mocks/manifest.json)\n' +
+      'and is fetched on demand. Run:\n' +
+      '\n' +
+      '  bash mocks/scripts/fetch-recordings.sh             # all 179 (~30s, 4.5MB)\n' +
+      '  bash mocks/scripts/fetch-recordings.sh --agent claude   # subset\n' +
+      '\n' +
+      'Or set SYNCLO_EXPLORE_MOCK_RECORDINGS_DIR if you stashed them elsewhere.\n',
     );
     process.exit(3);
   }

@@ -1,0 +1,161 @@
+#!/usr/bin/env node
+/**
+ * R2 sync — called by `.github/workflows/sync-mocks-to-r2.yml` after
+ * merge to main. Picks up `.jsonl` files in mocks/recordings-staging/,
+ * uploads each to R2, updates mocks/manifest.json, and writes the
+ * updated manifest back to R2.
+ *
+ * Not intended for local invocation. Requires CLOUDFLARE_API_TOKEN +
+ * CLOUDFLARE_ACCOUNT_ID env. If you need to test the upload path
+ * locally, configure wrangler with your own credentials AND set
+ * env SYNCLO_OD_MOCKS_I_KNOW_WHAT_IM_DOING=1 to bypass the safety gate.
+ *
+ * Atomic ordering:
+ *   1. Validate every staging .jsonl (parse meta, sha256, size)
+ *      → abort the whole run if any is malformed; no partial state
+ *   2. Upload each to R2 (parallel, capped at 4 concurrent)
+ *   3. Mutate manifest in-memory
+ *   4. Upload updated manifest to R2
+ *   5. Delete the staging files (caller commits + pushes manifest back)
+ */
+
+import { readdir, unlink, stat } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  inspectRecording,
+  upsertEntry,
+  readManifest,
+  writeManifest,
+} from './lib/manifest-utils.mjs';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const MOCKS_DIR = dirname(HERE);
+const STAGING_DIR = join(MOCKS_DIR, 'recordings-staging');
+const MANIFEST_PATH = join(MOCKS_DIR, 'manifest.json');
+const BUCKET = 'open-design-mocks';
+const KEY_PREFIX = 'recordings/v1/';
+const CONCURRENCY = 4;
+
+function checkEnv() {
+  const isCi = process.env.GITHUB_ACTIONS === 'true';
+  const hasOverride = process.env.SYNCLO_OD_MOCKS_I_KNOW_WHAT_IM_DOING === '1';
+  if (!isCi && !hasOverride) {
+    console.error('✗ upload-to-r2.mjs is intended for the GitHub Action.');
+    console.error('  To upload from your laptop you must explicitly opt-in:');
+    console.error('    SYNCLO_OD_MOCKS_I_KNOW_WHAT_IM_DOING=1 node mocks/scripts/upload-to-r2.mjs');
+    process.exit(2);
+  }
+  if (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_ACCOUNT_ID) {
+    console.error('✗ CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set.');
+    process.exit(2);
+  }
+}
+
+function wrangler(args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('wrangler', args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: process.env,
+    });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', d => { stdout += d.toString(); });
+    child.stderr.on('data', d => { stderr += d.toString(); });
+    child.on('error', reject);
+    child.on('exit', code => {
+      if (code === 0) resolve({ stdout, stderr });
+      else reject(new Error(`wrangler ${args.join(' ')} exit ${code}: ${stderr || stdout}`));
+    });
+  });
+}
+
+async function uploadObject(localPath, key) {
+  await wrangler(['r2', 'object', 'put', `${BUCKET}/${key}`, '--file', localPath, '--remote']);
+}
+
+async function gatherStaging() {
+  let entries;
+  try {
+    entries = await readdir(STAGING_DIR);
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  const out = [];
+  for (const f of entries) {
+    if (!f.endsWith('.jsonl')) continue;
+    const path = join(STAGING_DIR, f);
+    const st = await stat(path);
+    if (!st.isFile()) continue;
+    out.push(path);
+  }
+  return out.sort();
+}
+
+/** Parallel work pool with bounded concurrency. */
+async function parallel(items, limit, fn) {
+  const results = [];
+  let idx = 0;
+  const workers = Array.from({ length: limit }, async () => {
+    while (idx < items.length) {
+      const i = idx++;
+      results[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+async function main() {
+  checkEnv();
+
+  // Step 1: validate every staged recording. Abort entire run if any is bad.
+  const stagingPaths = await gatherStaging();
+  if (stagingPaths.length === 0) {
+    console.log('no staging files — nothing to upload.');
+    return;
+  }
+  console.log(`validating ${stagingPaths.length} staged recordings…`);
+  const previews = stagingPaths.map(p => {
+    try {
+      return { path: p, entry: inspectRecording(p) };
+    } catch (err) {
+      console.error(`✗ ${p}: ${err.message}`);
+      throw new Error(`validation failed; aborting before any R2 writes`);
+    }
+  });
+
+  // Step 2: upload each to R2 (parallel, bounded).
+  console.log(`uploading to R2 (concurrency=${CONCURRENCY})…`);
+  await parallel(previews, CONCURRENCY, async (p) => {
+    const key = `${KEY_PREFIX}${p.entry.trace_id}.jsonl`;
+    await uploadObject(p.path, key);
+    console.log(`  ✓ ${p.entry.trace_id} (${p.entry.bytes}B sha256=${p.entry.sha256.slice(0, 12)}…)`);
+  });
+
+  // Step 3: rebuild manifest with each entry inserted.
+  console.log('updating manifest…');
+  const manifest = readManifest(MANIFEST_PATH);
+  for (const p of previews) upsertEntry(manifest, p.entry);
+  writeManifest(MANIFEST_PATH, manifest);
+
+  // Step 4: upload updated manifest to R2 so consumers see new entries
+  // without waiting for the next git push.
+  console.log('uploading manifest to R2…');
+  await uploadObject(MANIFEST_PATH, `${KEY_PREFIX}manifest.json`);
+
+  // Step 5: remove the staging files locally so the post-run commit
+  // step clears the staging dir back to empty.
+  console.log('clearing staging…');
+  for (const p of previews) await unlink(p.path);
+
+  console.log('');
+  console.log(`✅ uploaded ${previews.length} recordings.`);
+  console.log(`   manifest now has ${manifest.total} entries (${(manifest.total_bytes/1024).toFixed(0)} KB total)`);
+}
+
+main().catch(err => {
+  console.error(`✗ ${err.message}`);
+  process.exit(1);
+});

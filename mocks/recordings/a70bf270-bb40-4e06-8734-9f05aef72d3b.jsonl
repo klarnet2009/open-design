@@ -1,2 +1,0 @@
-{"type":"meta","source":{"provider":"langfuse","trace_id":"a70bf270-bb40-4e06-8734-9f05aef72d3b","project_id":"cmov9fhj905kaad06h8to8rqu"},"agent":"claude","outcome":"failed","duration_ms":3141,"tool_call_count":0,"error_count":0,"total_tokens":0,"tags":["agent:claude","client:desktop","open-design","os:win32","project:proj-001"],"user_input":"صمملي ديزاين موقع موسيقي وبي اياه بيسك مع زخارف عربيه","timestamp":"2026-05-28T16:34:34.517Z","session_id":"75ab5caa-6b7d-4d01-ac03-b2ece54e9398"}
-{"type":"report","content":"Credit balance is too low"}

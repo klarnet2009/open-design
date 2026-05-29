@@ -1,2 +1,0 @@
-{"type":"meta","source":{"provider":"langfuse","trace_id":"24565b22-5230-40cd-8905-1c7936b54aef","project_id":"cmov9fhj905kaad06h8to8rqu"},"agent":"claude","outcome":"failed","duration_ms":3267,"tool_call_count":0,"error_count":0,"total_tokens":0,"tags":["agent:claude","client:desktop","open-design","os:win32","project:proj-001"],"user_input":"اه","timestamp":"2026-05-28T16:35:02.029Z","session_id":"75ab5caa-6b7d-4d01-ac03-b2ece54e9398"}
-{"type":"report","content":"Credit balance is too low"}

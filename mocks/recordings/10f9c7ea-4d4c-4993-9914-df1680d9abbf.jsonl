@@ -1,2 +1,0 @@
-{"type":"meta","source":{"provider":"langfuse","trace_id":"10f9c7ea-4d4c-4993-9914-df1680d9abbf","project_id":"cmov9fhj905kaad06h8to8rqu"},"agent":"cursor-agent","model":"auto","outcome":"failed","duration_ms":693,"tool_call_count":0,"error_count":0,"tags":["agent:cursor-agent","model:auto","open-design","os:darwin","project:proj-001"],"user_input":"i need to work on the prototypes pf the following designs","timestamp":"2026-05-28T16:31:31.342Z","session_id":"40e92b93-443d-4000-a03c-a0d490807da8"}
-{"type":"report","content":""}

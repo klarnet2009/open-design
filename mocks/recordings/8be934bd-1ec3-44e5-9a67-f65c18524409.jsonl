@@ -1,2 +1,0 @@
-{"type":"meta","source":{"provider":"langfuse","trace_id":"8be934bd-1ec3-44e5-9a67-f65c18524409","project_id":"cmov9fhj905kaad06h8to8rqu"},"agent":"gemini","outcome":"failed","duration_ms":147640,"tool_call_count":0,"error_count":0,"total_tokens":102840,"tags":["agent:gemini","client:desktop","open-design","os:darwin","project:proj-001","skill:algorithmic-art"],"user_input":"Please try again","timestamp":"2026-05-28T14:53:27.403Z","session_id":"9adb48c8-0744-47ee-a408-1f037c56d5aa"}
-{"type":"report","content":""}

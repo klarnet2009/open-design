@@ -1,2 +1,0 @@
-{"type":"meta","source":{"provider":"langfuse","trace_id":"b11a039d-5d8c-4035-a6c2-f49e94ed27d2","project_id":"cmov9fhj905kaad06h8to8rqu"},"agent":"deepseek","outcome":"failed","duration_ms":182,"tool_call_count":0,"error_count":1,"tags":["agent:deepseek","client:desktop","ds:default","open-design","os:darwin","project:proj-001","skill:agent-browser"],"user_input":"rediseña este cuadro de precios","timestamp":"2026-05-28T16:32:56.479Z","session_id":"7a1dc886-2445-4dee-aa8b-88f91b8430e3"}
-{"type":"report","content":""}

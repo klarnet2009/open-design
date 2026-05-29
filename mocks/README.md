@@ -27,6 +27,10 @@ project (179 traces across 9 agents and 5+ skills as of this commit).
 ## tl;dr
 
 ```bash
+# First-time setup — pull the recording corpus from R2 (~30s, 4.5MB):
+bash mocks/scripts/fetch-recordings.sh
+# Subsequent runs hit the local cache (sha256-verified, instant).
+
 # Make the mock CLIs override the real ones for this shell:
 export PATH="$PWD/mocks/bin:$PATH"
 
@@ -46,6 +50,42 @@ The mock binaries are bash wrappers that exec
 `node mocks/mock-agent.mjs --as <agent>`. Anything fed to stdin is
 discarded by the renderer but used by the recording picker (see hash
 mode below).
+
+## Recordings live on R2, not in this repo
+
+The 179-recording corpus (~4.5 MB) is hosted on Cloudflare R2 at
+`open-design-mocks` and fetched **on demand** — `pnpm install` does NOT
+pull them, and the repo stays small. Recordings only land in
+`mocks/recordings/` when:
+
+1. You run `bash mocks/scripts/fetch-recordings.sh` directly, OR
+2. `bash mocks/scripts/smoke-test.sh` runs and the dir is empty (auto-
+   fetch fallback), OR
+3. A mock binary spawn finds no data — it errors with a pointer at the
+   fetch script (no silent failure).
+
+This is by design: contributors who don't touch agent code don't pay
+the fetch cost. CI jobs that DO touch agent code (`apps/daemon/tests/`
+parser changes, etc.) run the fetch as a quick pre-step and cache
+`mocks/recordings/` between runs.
+
+```bash
+# Fetch everything (parallel, sha256-verified, idempotent):
+bash mocks/scripts/fetch-recordings.sh
+
+# Fetch a subset:
+bash mocks/scripts/fetch-recordings.sh --agent claude       # 57 claude traces
+bash mocks/scripts/fetch-recordings.sh --outcome failed     # 35 failed-path traces
+bash mocks/scripts/fetch-recordings.sh --skill agent-browser
+
+# Override cache location (e.g. share across multiple OD checkouts):
+OD_MOCKS_CACHE_DIR=~/.cache/od-mocks bash mocks/scripts/fetch-recordings.sh
+```
+
+Manifest at `mocks/manifest.json` is the committed source of truth —
+it lists every recording's `trace_id`, `sha256`, `bytes`, `agent`,
+`outcome`, `skills`, `multi_turn`, plus histograms over the corpus.
+Tooling reads this; you don't have to.
 
 ---
 
@@ -161,21 +201,23 @@ final assistant text).
 
 ### Indexed metadata
 
-`recordings/index.json` is a flat manifest with one entry per recording
-plus histograms over all recordings. Query with `jq`:
+`mocks/manifest.json` is a flat manifest with one entry per recording
+plus histograms over all recordings, committed to the repo. It's also
+mirrored to R2 alongside the .jsonl files so consumers can fetch the
+current catalog without cloning. Query with `jq`:
 
 ```bash
 # All multi-turn claude sessions about HTML editing
 jq '.entries[] | select(.agent=="claude" and .multi_turn==true)' \
-  mocks/recordings/index.json | head -50
+  mocks/manifest.json | head -50
 
 # Failed codex traces (negative-path tests)
 jq '.entries[] | select(.agent=="codex" and .outcome=="failed") | .trace_id' \
-  mocks/recordings/index.json
+  mocks/manifest.json
 
 # Agent-browser skill, sorted by tool count desc
 jq '[.entries[] | select(.skills | index("agent-browser"))] | sort_by(-.tool_count)' \
-  mocks/recordings/index.json
+  mocks/manifest.json
 ```
 
 ### Headline stats (current dataset)
@@ -209,9 +251,17 @@ re-run.
 
 ## Adding more recordings
 
-The exporter that produced this set lives in
+The flow is **staging in PR → auto-upload on merge**. No one — not even a
+core maintainer — has R2 write credentials on their laptop; only the
+GitHub Action does. This means a stray `mocks/scripts/...` invocation
+can't corrupt prod data, and every new recording lands in a PR diff for
+review first.
+
+### Step 1 — produce the .jsonl from your raw trace
+
+The exporter that produced the current 179-trace set lives in
 [nexu-io/agent-pr-explore](https://github.com/nexu-io/agent-pr-explore)
-under `cli/src/local/orchestrator/langfuse-import.ts`. To pull more:
+under `cli/src/local/orchestrator/langfuse-import.ts`:
 
 ```bash
 cd ~/Documents/agent-pr-explore
@@ -226,21 +276,57 @@ synclo-explore local langfuse-import \
 synclo-explore local langfuse-import \
   --min-tool-calls 8 --min-turns-in-session 3 --limit 50
 
-synclo-explore local langfuse-import \
-  --outcome failed --tag agent:gemini --limit 20
-
-# Anonymize + ship to OD:
-synclo-explore local recordings anonymize \
-  --out-dir ~/Documents/open-design/mocks/recordings
+# Anonymize + write to a temp dir:
+synclo-explore local recordings anonymize --out-dir /tmp/new-recordings
 ```
 
-The CLI is also available standalone for OD contributors who don't have
-the synclo-explore checkout — install via:
+### Step 2 — stage in this repo, open a PR
 
 ```bash
-npm i -g @nexu-io/synclo-explore   # when published
-# or run the dist/index.js directly from the source repo.
+cd ~/Documents/open-design
+for f in /tmp/new-recordings/*.jsonl; do
+  bash mocks/scripts/add-recording.sh "$f"
+done
+
+git checkout -b mocks/add-data-report
+git add mocks/recordings-staging/
+git commit -m "mocks: stage 30 data-report recordings"
+gh pr create
 ```
+
+`add-recording.sh` validates each .jsonl (meta event present, UUID
+filename) and prints the **exact manifest entry** the CI workflow will
+commit post-merge. The reviewer eyeballs the diff (~30 KB per recording,
+mostly tool I/O) for anonymization gaps.
+
+### Step 3 — merge → CI auto-syncs
+
+On merge to main, `.github/workflows/sync-mocks-to-r2.yml` fires (paths
+filter `mocks/recordings-staging/**`), runs `mocks/scripts/upload-to-r2.mjs`,
+and:
+
+1. Uploads each staged .jsonl to R2 (4-concurrent, sha256-verified)
+2. Rebuilds `mocks/manifest.json` (entry insert, histograms, multi_turn)
+3. Uploads the updated manifest to R2 too
+4. Deletes the staged files and commits `mocks: sync N recordings to R2 [skip ci]` back to main
+
+Concurrency group `r2-mocks-upload` serializes runs so two parallel PRs
+can't race on the manifest.
+
+### Why this trust model
+
+- **R2 write secret never leaves CI.** `CLOUDFLARE_API_TOKEN` is a repo
+  secret with scope limited to the `open-design-mocks` bucket. Local
+  scripts have no path to call wrangler put.
+- **No silent corruption.** Reviewer sees every byte of new data in the
+  PR diff before it reaches R2.
+- **Read stays public.** Anyone can fetch via the r2.dev URL; only
+  appending data requires merging to main.
+
+If you absolutely need to push from your laptop (e.g. backfilling an old
+trace the Action somehow lost), set
+`SYNCLO_OD_MOCKS_I_KNOW_WHAT_IM_DOING=1` and run `upload-to-r2.mjs` with
+your own wrangler login. Not recommended; consider opening a PR instead.
 
 ---
 
@@ -305,9 +391,18 @@ mocks/
 │   ├── deepseek  qwen    grok
 │   ├── devin hermes kilo kimi kiro vibe
 │   └── vela                       ← 15 bash wrappers, PATH-overlay
-└── recordings/
-    ├── index.json             ← histograms + per-recording metadata
-    └── *.jsonl                ← 179 anonymized Langfuse traces
+├── manifest.json                 ← committed: 179 entries' metadata + sha256 + R2 storage hints
+├── scripts/
+│   ├── smoke-test.sh             ← 21 checks; auto-fetches recordings if empty
+│   ├── fetch-recordings.sh       ← pull from R2 (parallel, sha256-verified, idempotent)
+│   ├── add-recording.sh          ← maintainer-local: validates + copies to staging dir (no R2 calls)
+│   ├── upload-to-r2.mjs          ← called only by .github/workflows/sync-mocks-to-r2.yml
+│   └── lib/
+│       └── manifest-utils.mjs    ← shared sha256 / meta-parse / manifest-rebuild logic
+├── recordings-staging/           ← drop new .jsonl here, PR, merge → Action uploads
+│   └── .gitkeep
+└── recordings/                   ← populated at runtime, gitignored .jsonl
+    └── .gitignore                ← recordings come via fetch
 ```
 
 No external dependencies. Pure node:`fs`/`crypto`/`child_process`. Works
