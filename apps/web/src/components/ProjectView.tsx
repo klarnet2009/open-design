@@ -4237,6 +4237,22 @@ export function ProjectView({
   const projectInstructions = (project.customInstructions ?? '').trim();
   const hasProjectInstructions = projectInstructions.length > 0;
   const projectInstructionsPreview = compactInlinePreview(projectInstructions);
+  const executionControls = (
+    <>
+      <AvatarMenu
+        config={config}
+        agents={agents}
+        daemonLive={daemonLive}
+        onModeChange={onModeChange}
+        onAgentChange={onAgentChange}
+        onAgentModelChange={onAgentModelChange}
+        onOpenSettings={() => onOpenSettings('execution')}
+        onRefreshAgents={onRefreshAgents}
+        onBack={onBack}
+        placement="up"
+      />
+    </>
+  );
 
   return (
     <div className="app">
@@ -4250,32 +4266,16 @@ export function ProjectView({
         backLabel={t('project.backToProjects')}
         fileActionsBefore={(
           <>
+            <HandoffButton projectId={project.id} />
             <button
               type="button"
               className="settings-icon-btn"
-              data-testid="project-settings-trigger"
-              title={t('project.customInstructions')}
-              aria-label={t('project.customInstructions')}
-              aria-expanded={instructionsMode !== 'closed'}
-              onClick={() => {
-                setInstructionsDraft(project.customInstructions ?? '');
-                setInstructionsMode(hasProjectInstructions ? 'review' : 'edit');
-              }}
+              onClick={() => onOpenSettings('execution')}
+              title={t('chat.cliSettingsTitle')}
+              aria-label={t('chat.cliSettingsAria')}
             >
-              <Icon name="sliders" size={16} />
+              <Icon name="settings" size={16} />
             </button>
-            <HandoffButton projectId={project.id} />
-            <AvatarMenu
-              config={config}
-              agents={agents}
-              daemonLive={daemonLive}
-              onModeChange={onModeChange}
-              onAgentChange={onAgentChange}
-              onAgentModelChange={onAgentModelChange}
-              onOpenSettings={onOpenSettings}
-              onRefreshAgents={onRefreshAgents}
-              onBack={onBack}
-            />
             <div
               className="app-chrome-file-actions-before workspace-tabs-file-actions"
               data-app-chrome-file-actions="true"
@@ -4489,6 +4489,7 @@ export function ProjectView({
                 onProjectChange({ ...project, skillId });
               }}
               activePluginSnapshot={activePluginSnapshot}
+              composerFooterAccessory={executionControls}
               onCollapse={() => setWorkspaceFocused(true)}
             />
           ) : (

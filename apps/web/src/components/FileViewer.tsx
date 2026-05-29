@@ -63,10 +63,10 @@ import {
   exportReactComponentAsHtml,
   exportReactComponentAsZip,
   openSandboxedPreviewInNewTab,
-  requestPreviewSnapshot,
   requestPreviewSnapshotResult,
   type PreviewSnapshotResult,
 } from '../runtime/exports';
+import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
 import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
@@ -159,7 +159,6 @@ type DeployProviderOption = {
     | 'fileViewer.cloudflareApiTokenPlaceholder';
   tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint';
   tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired';
-  previewHintKey: 'fileViewer.vercelPreviewOnly' | 'fileViewer.cloudflarePagesPreviewHint';
   tokenLabelKey:
     | 'fileViewer.vercelToken'
     | 'fileViewer.cloudflareApiToken';
@@ -254,7 +253,6 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
     tokenPlaceholderKey: 'fileViewer.vercelTokenPlaceholder',
     tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint',
     tokenRequiredKey: 'fileViewer.vercelTokenRequired',
-    previewHintKey: 'fileViewer.vercelPreviewOnly',
     tokenLabelKey: 'fileViewer.vercelToken',
   },
   {
@@ -265,7 +263,6 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
     tokenPlaceholderKey: 'fileViewer.cloudflareApiTokenPlaceholder',
     tokenReuseHintKey: 'fileViewer.cloudflareApiTokenReuseHint',
     tokenRequiredKey: 'fileViewer.cloudflareApiTokenRequired',
-    previewHintKey: 'fileViewer.cloudflarePagesPreviewHint',
     tokenLabelKey: 'fileViewer.cloudflareApiToken',
     accountIdLabelKey: 'fileViewer.cloudflareAccountId',
     accountIdHintKey: 'fileViewer.cloudflareAccountIdHint',
@@ -573,6 +570,50 @@ async function previewSnapshotBlobFromIframes(
     fallback ??= result;
   }
   throw new Error(snapshotFailureMessage(fallback, t));
+}
+
+function deploymentTimestamp(deployment: WebDeploymentInfo): number {
+  const maybeDeployedAt = (deployment as WebDeploymentInfo & { deployedAt?: number | string }).deployedAt;
+  const candidates = [maybeDeployedAt, deployment.updatedAt, deployment.createdAt];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate;
+    if (typeof candidate === 'string') {
+      const parsed = Date.parse(candidate);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return 0;
+}
+
+function compareDeploymentsByNewest(a: WebDeploymentInfo, b: WebDeploymentInfo): number {
+  return deploymentTimestamp(b) - deploymentTimestamp(a);
+}
+
+function shareUrlForDeployment(deployment: WebDeploymentInfo): string {
+  const customDomain = deployment.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+    ? deployment.cloudflarePages?.customDomain
+    : undefined;
+  if (customDomain?.status === 'ready' && customDomain.url?.trim()) {
+    return customDomain.url.trim();
+  }
+  return deployment.url?.trim() || '';
+}
+
+function resolveShareUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (typeof window === 'undefined') return trimmed;
+  return new URL(trimmed, window.location.origin).toString();
+}
+
+function pickLatestShareDeployment(
+  deploymentsByProvider: Partial<Record<WebDeployProviderId, WebDeploymentInfo>>,
+): WebDeploymentInfo | null {
+  return Object.values(deploymentsByProvider)
+    .filter((deployment): deployment is WebDeploymentInfo =>
+      Boolean(deployment && shareUrlForDeployment(deployment) && deployResultState(deployment.status) !== 'failed'))
+    .sort(compareDeploymentsByNewest)[0] ?? null;
 }
 
 async function requestPreviewSnapshotResultWithRetries(
@@ -3818,8 +3859,11 @@ function HtmlViewer({
       | 'pptx'
       | 'zip'
       | 'html'
+      | 'image'
       | 'markdown'
       | 'template'
+      | 'share_link'
+      | 'share_page'
       | 'vercel'
       | 'cloudflare_pages',
     fn: () => Promise<unknown> | unknown,
@@ -3827,6 +3871,7 @@ function HtmlViewer({
     const requestId = analytics.newRequestId();
     const artifactId = anonymizeArtifactId({ projectId, fileName: file.name });
     const artifactKind = artifactKindToTracking({ fileKind: file.kind ?? null });
+    const trackingFormat = format as Exclude<typeof format, 'image'>;
     trackShareOptionPopoverClick(
       analytics.track,
       {
@@ -3834,7 +3879,7 @@ function HtmlViewer({
         area: 'share_option_popover',
         artifact_id: artifactId,
         artifact_kind: artifactKind,
-        element: format,
+        element: trackingFormat,
         project_id: projectId,
         project_kind: projectKind,
       },
@@ -3851,7 +3896,7 @@ function HtmlViewer({
           artifact_kind: artifactKind,
           project_id: projectId,
           project_kind: projectKind,
-          export_format: format,
+          export_format: trackingFormat,
           result,
           ...(errorCode ? { error_code: errorCode } : {}),
           export_duration_ms: Math.round(performance.now() - started),
@@ -3859,7 +3904,7 @@ function HtmlViewer({
         { requestId },
       );
     };
-    const toastFormats = new Set(['pdf', 'pptx', 'zip', 'html', 'markdown']);
+    const toastFormats = new Set(['pdf', 'pptx', 'zip', 'html', 'image', 'markdown']);
     try {
       const out = fn();
       if (out && typeof (out as Promise<unknown>).then === 'function') {
@@ -3943,7 +3988,8 @@ function HtmlViewer({
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
   const zoomMenuRef = useRef<HTMLDivElement | null>(null);
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
-  const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const [deployMenuOpen, setDeployMenuOpen] = useState(false);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const [exportReadyNudge, setExportReadyNudge] = useState(false);
   const exportReadyNudgeSeenRef = useRef<Set<string>>(new Set());
   // Template save UX. We surface a transient "Saved" pill in the share
@@ -3975,6 +4021,7 @@ function HtmlViewer({
   const [cloudflareZoneId, setCloudflareZoneId] = useState('');
   const [cloudflareDomainPrefix, setCloudflareDomainPrefix] = useState('');
   const deployProviderLoadSeqRef = useRef(0);
+  const deployTokenInputRef = useRef<HTMLInputElement | null>(null);
   const [inTabPresent, setInTabPresent] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [boardMode, setBoardMode] = useState(false);
@@ -4198,7 +4245,10 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
   const [templateSavedToast, setTemplateSavedToast] = useState<string | null>(null);
   const [deploySavedToast, setDeploySavedToast] = useState<{ message: string; details: string } | null>(null);
+  const [deployActionToast, setDeployActionToast] = useState<string | null>(null);
   const [exportToast, setExportToast] = useState<string | null>(null);
+  const [shareLinkFeedback, setShareLinkFeedback] = useState<'copied' | 'failed' | null>(null);
+  const [shareGuideToast, setShareGuideToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
@@ -4208,9 +4258,9 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   function deploymentMapForCurrentFile(items: WebDeploymentInfo[]) {
     const next: Partial<Record<WebDeployProviderId, WebDeploymentInfo>> = {};
     for (const option of DEPLOY_PROVIDER_OPTIONS) {
-      const deploymentForProvider = items.find(
-        (item) => item.fileName === file.name && item.providerId === option.id && item.url?.trim(),
-      );
+      const deploymentForProvider = items
+        .filter((item) => item.fileName === file.name && item.providerId === option.id && item.url?.trim())
+        .sort(compareDeploymentsByNewest)[0];
       if (deploymentForProvider) next[option.id] = deploymentForProvider;
     }
     return next;
@@ -5617,13 +5667,17 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   }, [agentToolsOpen]);
 
   useEffect(() => {
-    if (!shareMenuOpen) return;
+    if (!deployMenuOpen && !downloadMenuOpen) return;
     const onDocClick = (e: MouseEvent) => {
       if (!shareRef.current) return;
-      if (!shareRef.current.contains(e.target as Node)) setShareMenuOpen(false);
+      if (shareRef.current.contains(e.target as Node)) return;
+      setDeployMenuOpen(false);
+      setDownloadMenuOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShareMenuOpen(false);
+      if (e.key !== 'Escape') return;
+      setDeployMenuOpen(false);
+      setDownloadMenuOpen(false);
     };
     document.addEventListener('mousedown', onDocClick);
     document.addEventListener('keydown', onKey);
@@ -5631,7 +5685,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       document.removeEventListener('mousedown', onDocClick);
       document.removeEventListener('keydown', onKey);
     };
-  }, [shareMenuOpen]);
+  }, [deployMenuOpen, downloadMenuOpen]);
 
   useEffect(() => {
     if (!inTabPresent) return;
@@ -5654,10 +5708,10 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   // Snapshot this project as a reusable template. The daemon snapshots
   // EVERY html/text/code file in the project (not just the file open in
   // the viewer), so the template captures the whole design, not a single
-  // page. Surfaced here in the Share menu because that's where the user's
-  // share / export mental model already lives.
+  // page. Surfaced here in the Download menu because templates are saved
+  // from the same artifact output surface as files.
   function openSaveAsTemplateModal() {
-    setShareMenuOpen(false);
+    setDownloadMenuOpen(false);
     const defaultName =
       file.name.replace(/\.html?$/i, '') || t('fileViewer.templateNameDefault');
     setTemplateName(defaultName);
@@ -5700,9 +5754,10 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   }
 
   async function openDeployModal(nextProviderId: WebDeployProviderId = deployProviderId) {
-    setShareMenuOpen(false);
+    setDeployMenuOpen(false);
     setDeployModalOpen(true);
     setDeployError(null);
+    setDeployActionToast(null);
     setCopiedDeployLink(null);
     setDeployPhase('idle');
     await loadDeployProvider(nextProviderId, { fallbackToExisting: true });
@@ -5718,10 +5773,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   async function saveDeployConfig() {
     setSavingDeployConfig(true);
     setDeployError(null);
+    setDeployActionToast(null);
     try {
       if (deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID) {
         if (!deployToken.trim()) {
-          throw new Error(t('fileViewer.cloudflareApiTokenRequired'));
+          setDeployActionToast(t('fileViewer.cloudflareApiTokenRequired'));
+          deployTokenInputRef.current?.focus();
+          return null;
         }
         if (!cloudflareAccountId.trim()) {
           throw new Error(t('fileViewer.cloudflareAccountIdRequired'));
@@ -5766,6 +5824,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     setDeploying(true);
     setDeployPhase('deploying');
     setDeployError(null);
+    setDeployActionToast(null);
     setCopiedDeployLink(null);
     try {
       const cloudflarePagesSelection = buildCloudflarePagesDeploySelection();
@@ -5811,9 +5870,15 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       }
     } catch (err) {
       const option = getDeployProviderOption(deployProviderId);
-      setDeployError(
-        err instanceof Error ? err.message : t('fileViewer.deployProviderFailed', { provider: t(option.labelKey) }),
-      );
+      const message = err instanceof Error
+        ? err.message
+        : t('fileViewer.deployProviderFailed', { provider: t(option.labelKey) });
+      if (message === t(option.tokenRequiredKey, { provider: t(option.labelKey) })) {
+        setDeployActionToast(message);
+        deployTokenInputRef.current?.focus();
+      } else {
+        setDeployError(message);
+      }
     } finally {
       setDeploying(false);
       setDeployPhase('idle');
@@ -5860,6 +5925,23 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     window.setTimeout(() => {
       setCopiedDeployLink((current) => (current === safeUrl ? null : current));
     }, 1800);
+  }
+
+  async function copyShareLink(url: string) {
+    const safeUrl = url.trim();
+    if (!safeUrl) {
+      setShareLinkFeedback('failed');
+      setExportToast(t('useEverywhere.copyFailed'));
+      return false;
+    }
+    const ok = await copyToClipboard(safeUrl);
+    const feedback = ok ? 'copied' : 'failed';
+    setShareLinkFeedback(feedback);
+    if (!ok) setExportToast(t('useEverywhere.copyFailed'));
+    window.setTimeout(() => {
+      setShareLinkFeedback((current) => (current === feedback ? null : current));
+    }, 1800);
+    return ok;
   }
 
   function presentInThisTab() {
@@ -6160,9 +6242,45 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   }, [screenshotToast]);
 
   const showPresent = source !== null;
-  const canShare = source !== null;
   const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
-  const canPptx = canShare && Boolean(onExportAsPptx) && !streaming;
+  const artifactKind = file.artifactManifest?.kind ?? file.artifactKind ?? null;
+  const rendererId = file.artifactManifest?.renderer ?? null;
+  const isDeckArtifact = isDeck || artifactKind === 'deck' || rendererId === 'deck-html' || file.kind === 'presentation';
+  const isMarkdownArtifact =
+    artifactKind === 'markdown-document' ||
+    rendererId === 'markdown' ||
+    file.kind === 'text' && /\.mdx?$/i.test(file.name);
+  const isShareableArtifact =
+    file.kind === 'html' ||
+    isDeckArtifact ||
+    artifactKind === 'html' ||
+    rendererId === 'html';
+  const canShare = source !== null && isShareableArtifact;
+  const canPptx = canShare && isDeckArtifact && Boolean(onExportAsPptx) && !streaming;
+  const showPptxExport = canShare && isDeckArtifact;
+  const showMarkdownExport = canShare && isMarkdownArtifact;
+  const showImageExport = canShare;
+
+  async function exportPreviewAsImage() {
+    const iframes = [
+      srcDocPreviewIframeRef.current,
+      iframeRef.current === srcDocPreviewIframeRef.current ? null : iframeRef.current,
+    ];
+    let fallback: PreviewSnapshotResult | undefined;
+    for (const iframe of iframes) {
+      if (!iframe) {
+        fallback ??= { ok: false, reason: 'loading' };
+        continue;
+      }
+      const result = await requestPreviewSnapshotResultWithRetries(iframe);
+      if (result.ok) {
+        exportAsImage(result.snapshot.dataUrl, exportTitle);
+        return;
+      }
+      fallback ??= result;
+    }
+    throw new Error(snapshotFailureMessage(fallback, t));
+  }
   useEffect(() => {
     const nudgeKey = `${projectId}\n${file.name}`;
     if (!canShare || exportReadyNudgeSeenRef.current.has(nudgeKey)) return;
@@ -6174,11 +6292,19 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     return () => window.clearTimeout(timeout);
   }, [canShare, file.name, projectId]);
 
-  const openExportMenu = () => {
+  const openDownloadMenu = () => {
     fireArtifactHeaderClick('share_dropdown');
     setExportReadyNudge(false);
     markExportReadyNudgeSeen(projectId, file.name);
-    setShareMenuOpen((v) => !v);
+    setDeployMenuOpen(false);
+    setDownloadMenuOpen((v) => !v);
+  };
+  const openDeployMenu = () => {
+    fireArtifactHeaderClick('share_dropdown');
+    setExportReadyNudge(false);
+    markExportReadyNudgeSeen(projectId, file.name);
+    setDownloadMenuOpen(false);
+    setDeployMenuOpen((v) => !v);
   };
   const visibleSideComments = useMemo(
     () => previewComments
@@ -6263,27 +6389,53 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       ? t('fileViewer.redeployToProvider', { provider: label })
       : t('fileViewer.deployToProvider', { provider: label });
   };
-  const deployCopyLinks = DEPLOY_PROVIDER_OPTIONS.map((option) => ({
-    providerId: option.id,
-    providerLabel: t(option.labelKey),
-    url: deploymentsByProvider[option.id]?.url?.trim() || '',
-  })).filter((item) => item.url);
+  const deployActionIconFor = (providerId: WebDeployProviderId) => {
+    if (providerId === 'cloudflare-pages') return 'pages-line';
+    return 'upload-cloud-line';
+  };
+  const latestShareDeployment = useMemo(
+    () => pickLatestShareDeployment(deploymentsByProvider),
+    [deploymentsByProvider],
+  );
+  const latestDeployedShareUrl = latestShareDeployment
+    ? shareUrlForDeployment(latestShareDeployment)
+    : '';
+  const latestShareState = latestShareDeployment
+    ? deployResultState(latestShareDeployment.status)
+    : null;
+  const sharePageUrl = useMemo(
+    () => resolveShareUrl(latestDeployedShareUrl),
+    [latestDeployedShareUrl],
+  );
+  const canCopyShareLink = !streaming && Boolean(sharePageUrl);
+  const canOpenSharePage = !streaming && Boolean(sharePageUrl) && latestShareState !== 'delayed';
+  const shareLinkStatusHint =
+    streaming
+      ? t('fileViewer.shareAfterGenerationComplete')
+      : latestShareState === 'delayed'
+      ? t('fileViewer.deployLinkDelayed')
+      : latestShareState === 'protected'
+        ? t('fileViewer.deployLinkProtected')
+        : '';
+  const shareUnavailableHint = streaming
+    ? t('fileViewer.shareAfterGenerationComplete')
+    : t('fileViewer.shareLinkRequiresDeploy');
+  const copyShareLinkLabel =
+    shareLinkFeedback === 'copied'
+      ? t('fileViewer.copied')
+      : shareLinkFeedback === 'failed'
+        ? t('useEverywhere.copyFailed')
+        : t('fileViewer.copyShareLink');
   const deployButtonLabel =
     deployPhase === 'deploying'
       ? t('fileViewer.deployingToProvider', { provider: deployProviderLabel })
       : deployPhase === 'preparing-link'
         ? t('fileViewer.preparingPublicLink')
-        : deployActionLabelFor(deployProviderId);
+        : t('fileViewer.deployModalTitle');
   const copyDeployLabel = (url: string) =>
     copiedDeployLink === url.trim()
       ? t('fileViewer.copied')
       : t('fileViewer.copyDeployLink');
-  const copyDeployMenuLabel = (providerLabel: string, url: string) =>
-    copiedDeployLink === url.trim()
-      ? t('fileViewer.copied')
-      : providerLabel.toLowerCase().includes('cloudflare')
-        ? t('fileViewer.copyCloudflareLink')
-        : t('fileViewer.copyProviderLink', { provider: providerLabel });
   const statusLabelFor = (state: ReturnType<typeof deployResultState>) => {
     if (state === 'ready') return t('fileViewer.deployLinkReady');
     if (state === 'protected') return t('fileViewer.deployLinkProtectedLabel');
@@ -6719,82 +6871,138 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
             </div>
           ) : null}
           {canShare ? (
-            <div className="share-menu chrome-share-menu" ref={shareRef}>
-              <button
-                type="button"
-                className={
-                  'chrome-action chrome-action-primary chrome-action-export' +
-                  (exportReadyNudge ? ' export-ready-nudge' : '')
-                }
-                aria-haspopup="menu"
-                aria-expanded={shareMenuOpen}
-                onClick={openExportMenu}
-              >
-                <Icon name="download" size={13} />
-                <span>{t('fileViewer.shareLabel')}</span>
-                <Icon name="chevron-down" size={11} />
-              </button>
-              {shareMenuOpen ? (
-                <div className="share-menu-popover" role="menu">
-                  {deployCopyLinks.length > 0 ? (
-                    <>
-                      <div className="share-menu-section-label" role="presentation">
-                        {t('fileViewer.shareMenuShareLink')}
-                      </div>
-                      {deployCopyLinks.map((item) => (
+            <div className="chrome-file-action-menus" ref={shareRef}>
+              <div className="share-menu chrome-share-menu">
+                <button
+                  type="button"
+                  className="chrome-action chrome-action-secondary chrome-action-with-label"
+                  aria-haspopup="menu"
+                  aria-expanded={deployMenuOpen}
+                  onClick={openDeployMenu}
+                >
+                  <RemixIcon name="upload-cloud-line" size={15} />
+                  <span>{t('fileViewer.deployModalTitle')}</span>
+                </button>
+                {deployMenuOpen ? (
+                  <div className="share-menu-popover" role="menu">
+                    {DEPLOY_PROVIDER_OPTIONS.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className="share-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          const format =
+                            option.id === 'cloudflare-pages'
+                              ? 'cloudflare_pages'
+                              : option.id === 'vercel-self'
+                                ? 'vercel'
+                                : 'vercel';
+                          fireShareExport(format, () => openDeployModal(option.id));
+                        }}
+                      >
+                        <span className="share-menu-icon">
+                          <RemixIcon name={deployActionIconFor(option.id)} size={15} />
+                        </span>
+                        <span>{deployActionLabelFor(option.id)}</span>
+                      </button>
+                    ))}
+                    <div className="share-menu-divider" />
+                    <div className="share-menu-section-label" role="presentation">
+                      {t('fileViewer.shareMenuShareLink')}
+                    </div>
+                    {sharePageUrl ? (
+                      <>
                         <button
-                          key={`copy-${item.providerId}`}
                           type="button"
                           className="share-menu-item"
                           role="menuitem"
+                          disabled={!canCopyShareLink}
+                          title={!canCopyShareLink ? shareUnavailableHint : shareLinkStatusHint || undefined}
                           onClick={() => {
-                            setShareMenuOpen(false);
-                            void copyDeployLink(item.url);
+                            if (!canCopyShareLink || !sharePageUrl) return;
+                            fireShareExport('share_link', async () => {
+                              const ok = await copyShareLink(sharePageUrl);
+                              if (!ok) throw new Error('copy_share_link_failed');
+                            });
                           }}
                         >
                           <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
-                          <span>{copyDeployMenuLabel(item.providerLabel, item.url)}</span>
+                          <span className="share-menu-text">
+                            <span>{copyShareLinkLabel}</span>
+                            {shareLinkStatusHint ? (
+                              <small>{shareLinkStatusHint}</small>
+                            ) : null}
+                          </span>
                         </button>
-                      ))}
-                      <div className="share-menu-divider" />
-                    </>
-                  ) : null}
-                  <div className="share-menu-section-label" role="presentation">
-                    {t('fileViewer.shareMenuPublishOnline')}
+                        <button
+                          type="button"
+                          className="share-menu-item"
+                          role="menuitem"
+                          disabled={!canOpenSharePage}
+                          title={!canOpenSharePage ? shareLinkStatusHint || shareUnavailableHint : shareLinkStatusHint || undefined}
+                          onClick={() => {
+                            if (!canOpenSharePage || !sharePageUrl) return;
+                            setDeployMenuOpen(false);
+                            fireShareExport('share_page', () => {
+                              window.open(sharePageUrl, '_blank', 'noopener');
+                            });
+                          }}
+                        >
+                          <span className="share-menu-icon"><RemixIcon name="external-link-line" size={15} /></span>
+                          <span className="share-menu-text">
+                            <span>{t('fileViewer.openSharePage')}</span>
+                            {shareLinkStatusHint ? (
+                              <small>{shareLinkStatusHint}</small>
+                            ) : null}
+                          </span>
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="share-menu-item share-menu-guide"
+                        role="menuitem"
+                        title={shareUnavailableHint}
+                        onClick={() => {
+                          setShareGuideToast(shareUnavailableHint);
+                        }}
+                      >
+                        <span className="share-menu-icon"><RemixIcon name="link" size={15} /></span>
+                        <span className="share-menu-text">
+                          <span>
+                            {streaming
+                              ? t('fileViewer.shareAfterGenerationComplete')
+                              : t('fileViewer.shareLinkPublishGuide')}
+                          </span>
+                        </span>
+                      </button>
+                    )}
                   </div>
-                  {DEPLOY_PROVIDER_OPTIONS.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      className="share-menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        const format =
-                          option.id === 'cloudflare-pages'
-                            ? 'cloudflare_pages'
-                            : option.id === 'vercel-self'
-                              ? 'vercel'
-                              : 'vercel';
-                        fireShareExport(format, () => openDeployModal(option.id));
-                      }}
-                    >
-                      <span className="share-menu-icon"><RemixIcon name="upload-cloud-line" size={15} /></span>
-                      <span>{deployActionLabelFor(option.id)}</span>
-                    </button>
-                  ))}
-                  <div className="share-menu-divider" />
-                  <div className="share-menu-section-label" role="presentation">
-                    {t('fileViewer.shareMenuDownload')}
-                  </div>
-                  <div className="share-menu-subsection-label" role="presentation">
-                    {t('fileViewer.shareMenuPresentation')}
-                  </div>
+                ) : null}
+              </div>
+              <div className="share-menu chrome-share-menu">
+                <button
+                  type="button"
+                  className={
+                    'chrome-action chrome-action-primary chrome-action-export' +
+                    (exportReadyNudge ? ' export-ready-nudge' : '')
+                  }
+                  aria-haspopup="menu"
+                  aria-expanded={downloadMenuOpen}
+                  onClick={openDownloadMenu}
+                >
+                  <RemixIcon name="download-line" size={15} />
+                  <span>{t('fileViewer.download')}</span>
+                </button>
+                {downloadMenuOpen ? (
+                  <div className="share-menu-popover" role="menu">
                   <button
                     type="button"
-                    className="share-menu-item share-menu-subitem"
+                    className="share-menu-item"
                     role="menuitem"
                     onClick={() => {
-                      setShareMenuOpen(false);
+                      setDownloadMenuOpen(false);
                       fireShareExport('pdf', () => exportProjectAsPdf({
                         deck: effectiveDeck,
                         fallbackPdf: () => exportAsPdf(source ?? '', exportTitle, { deck: effectiveDeck }),
@@ -6805,70 +7013,52 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                     }}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
-                    <span>
-                      {effectiveDeck
-                        ? t('fileViewer.exportPdfAllSlides')
-                        : t('fileViewer.exportPdf')}
-                    </span>
+                    <span>{t('fileViewer.exportPdf')}</span>
                   </button>
-                  <button
-                    type="button"
-                    className="share-menu-item share-menu-subitem"
-                    role="menuitem"
-                    disabled={!canPptx}
-                    title={
-                      onExportAsPptx
-                        ? streaming
-                          ? t('fileViewer.exportPptxBusy')
-                          : t('fileViewer.exportPptxHint')
-                        : t('fileViewer.exportPptxNa')
-                    }
-                    onClick={() => {
-                      setShareMenuOpen(false);
-                      fireShareExport('pptx', () => {
-                        if (onExportAsPptx) onExportAsPptx(file.name);
-                      });
-                    }}
-                  >
-                    <span className="share-menu-icon"><RemixIcon name="file-ppt-line" size={15} /></span>
-                    <span>{t('fileViewer.exportPptx') + '…'}</span>
-                  </button>
-                  {!useUrlLoadPreview ? (
+                  {showPptxExport ? (
                     <button
                       type="button"
-                      className="share-menu-item share-menu-subitem"
+                      className="share-menu-item"
                       role="menuitem"
-                      onClick={async () => {
-                        setShareMenuOpen(false);
-                        const iframe = iframeRef.current;
-                        if (!iframe) return;
-                        const snap = await requestPreviewSnapshot(iframe);
-                        try {
-                          if (snap) {
-                            exportAsImage(snap.dataUrl, exportTitle);
-                          } else {
-                            console.warn('[exportAsImage] snapshot capture returned null');
-                            alert(t('fileViewer.exportImageFailed'));
-                          }
-                        } catch (err) {
-                          console.warn('[exportAsImage] failed to convert snapshot:', err);
-                          alert(t('fileViewer.exportImageFailed'));
-                        }
+                      disabled={!canPptx}
+                      title={
+                        onExportAsPptx
+                          ? streaming
+                            ? t('fileViewer.exportPptxBusy')
+                            : t('fileViewer.exportPptxHint')
+                          : t('fileViewer.exportPptxNa')
+                      }
+                      onClick={() => {
+                        setDownloadMenuOpen(false);
+                        fireShareExport('pptx', () => {
+                          if (onExportAsPptx) onExportAsPptx(file.name);
+                        });
+                      }}
+                    >
+                      <span className="share-menu-icon"><RemixIcon name="file-ppt-line" size={15} /></span>
+                      <span>{t('fileViewer.exportPptx')}</span>
+                    </button>
+                  ) : null}
+                  {showImageExport ? (
+                    <button
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setDownloadMenuOpen(false);
+                        fireShareExport('image', () => exportPreviewAsImage());
                       }}
                     >
                       <span className="share-menu-icon"><RemixIcon name="image-line" size={15} /></span>
                       <span>{t('fileViewer.exportImage')}</span>
                     </button>
                   ) : null}
-                  <div className="share-menu-subsection-label" role="presentation">
-                    {t('fileViewer.shareMenuSourceFiles')}
-                  </div>
                   <button
                     type="button"
-                    className="share-menu-item share-menu-subitem"
+                    className="share-menu-item"
                     role="menuitem"
                     onClick={() => {
-                      setShareMenuOpen(false);
+                      setDownloadMenuOpen(false);
                       fireShareExport('zip', () => exportProjectAsZip({
                         projectId,
                         filePath: file.name,
@@ -6882,34 +7072,30 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                   </button>
                   <button
                     type="button"
-                    className="share-menu-item share-menu-subitem"
+                    className="share-menu-item"
                     role="menuitem"
                     onClick={() => {
-                      setShareMenuOpen(false);
+                      setDownloadMenuOpen(false);
                       fireShareExport('html', () => exportAsHtml(source ?? '', exportTitle));
                     }}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-code-line" size={15} /></span>
                     <span>{t('fileViewer.exportHtml')}</span>
                   </button>
-                  {/* Export as Markdown — pass-through download of the
-                      artifact source with a `.md` extension. No conversion
-                      runs; the file body is identical to the Source view.
-                      Useful for piping the artifact into markdown-aware
-                      tooling (LLM context windows, vault apps). See
-                      issue #279. */}
-                  <button
-                    type="button"
-                    className="share-menu-item share-menu-subitem"
-                    role="menuitem"
-                    onClick={() => {
-                      setShareMenuOpen(false);
-                      fireShareExport('markdown', () => exportAsMd(source ?? '', exportTitle));
-                    }}
-                  >
-                    <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
-                    <span>{t('fileViewer.exportMd')}</span>
-                  </button>
+                  {showMarkdownExport ? (
+                    <button
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setDownloadMenuOpen(false);
+                        fireShareExport('markdown', () => exportAsMd(source ?? '', exportTitle));
+                      }}
+                    >
+                      <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
+                      <span>{t('fileViewer.exportMd')}</span>
+                    </button>
+                  ) : null}
                   <div className="share-menu-divider" />
                   <div className="share-menu-section-label" role="presentation">
                     {t('fileViewer.shareMenuSave')}
@@ -6936,6 +7122,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                   </button>
                 </div>
               ) : null}
+            </div>
             </div>
           ) : null}
         </>)}
@@ -7348,13 +7535,11 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
         <div className="modal-backdrop" role="presentation">
           <div className="modal deploy-modal deploy-flow-modal" role="dialog" aria-modal="true">
             <div className="modal-head">
-              <div className="kicker">{deployProviderLabel}</div>
               <h2>{t('fileViewer.deployToProvider', { provider: deployProviderLabel })}</h2>
-              <p className="subtitle">{t('fileViewer.deployModalSubtitle')}</p>
             </div>
             <div className="deploy-form">
               <label className="deploy-provider-field">
-                <span>{t('fileViewer.deployProviderLabel')}</span>
+                <span className="deploy-field-title">{t('fileViewer.deployProviderLabel')}</span>
                 <select
                   value={deployProviderId}
                   onChange={(e) => {
@@ -7368,32 +7553,25 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                   ))}
                 </select>
               </label>
-              <div className="field-label-row">
-                <label htmlFor="deploy-token">{t(deployProvider.tokenLabelKey)}</label>
-                <div className="field-label-note">
-                  {deployConfig?.configured ? (
-                    <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
-                  ) : null}
-                  {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                    <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
-                  ) : null}
-                  <a
-                    href={deployProvider.tokenLink}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                  >
-                    {t(deployProvider.tokenLinkKey)}
-                  </a>
-                </div>
+              <div className="field-label-row deploy-token-label-row">
+                <label htmlFor="deploy-token" className="deploy-field-title required">{t(deployProvider.tokenLabelKey)}</label>
+                <a
+                  href={deployProvider.tokenLink}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  {t(deployProvider.tokenLinkKey)}
+                </a>
               </div>
-              <input
-                id="deploy-token"
-                type="password"
-                value={deployToken}
-                placeholder={t(deployProvider.tokenPlaceholderKey, { provider: deployProviderLabel })}
-                onChange={(e) => setDeployToken(e.target.value)}
-              />
-              <div className="deploy-config-actions">
+              <div className="deploy-token-input-row">
+                <input
+                  ref={deployTokenInputRef}
+                  id="deploy-token"
+                  type="password"
+                  value={deployToken}
+                  placeholder={t(deployProvider.tokenPlaceholderKey, { provider: deployProviderLabel })}
+                  onChange={(e) => setDeployToken(e.target.value)}
+                />
                 <button
                   type="button"
                   className="ghost-link button-like"
@@ -7405,11 +7583,21 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                   {savingDeployConfig ? t('fileViewer.savingConfig') : t('fileViewer.save')}
                 </button>
               </div>
+              {deployConfig?.configured || deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                <div className="deploy-token-hints">
+                  {deployConfig?.configured ? (
+                    <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
+                  ) : null}
+                  {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                    <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
+                  ) : null}
+                </div>
+              ) : null}
               {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
                 <>
                   <div className="deploy-field-grid single-field">
                     <label>
-                      <span>{t('fileViewer.cloudflareAccountId')}</span>
+                      <span className="deploy-field-title required">{t('fileViewer.cloudflareAccountId')}</span>
                       <input
                         value={cloudflareAccountId}
                         onChange={(e) => setCloudflareAccountId(e.target.value)}
@@ -7419,16 +7607,32 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                   </div>
                   <div className="deploy-field-grid cloudflare-domain-grid">
                     <label>
-                      <span>{t('fileViewer.cloudflareDomainPrefixLabel')}</span>
+                      <span className="deploy-field-title">{t('fileViewer.cloudflareDomainPrefixLabel')}</span>
                       <input
                         value={cloudflareDomainPrefix}
                         placeholder={t('fileViewer.cloudflareDomainPrefixPlaceholder')}
                         onChange={(e) => setCloudflareDomainPrefix(e.target.value)}
                       />
                     </label>
-                    <label>
-                      <span>{t('fileViewer.cloudflareZoneLabel')}</span>
+                    <div className="deploy-field-control">
+                      <span className="deploy-field-title-row">
+                        <label className="deploy-field-title" htmlFor="cloudflare-zone-select">
+                          {t('fileViewer.cloudflareZoneLabel')}
+                        </label>
+                        <button
+                          type="button"
+                          className="ghost-link deploy-field-inline-action"
+                          disabled={cloudflareZonesLoading || !deployConfig?.configured}
+                          onClick={() => {
+                            void loadCloudflareZones();
+                          }}
+                        >
+                          <RemixIcon name="refresh-line" size={13} />
+                          {cloudflareZonesLoading ? t('fileViewer.cloudflareZonesLoading') : t('fileViewer.cloudflareZonesRefresh')}
+                        </button>
+                      </span>
                       <select
+                        id="cloudflare-zone-select"
                         value={cloudflareZoneId}
                         disabled={cloudflareZonesLoading || (!deployConfig?.configured && !cloudflareZones.length)}
                         onChange={(e) => setCloudflareZoneId(e.target.value)}
@@ -7442,19 +7646,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                           </option>
                         ))}
                       </select>
-                    </label>
-                  </div>
-                  <div className="deploy-config-actions secondary">
-                    <button
-                      type="button"
-                      className="ghost-link button-like"
-                      disabled={cloudflareZonesLoading || !deployConfig?.configured}
-                      onClick={() => {
-                        void loadCloudflareZones();
-                      }}
-                    >
-                      {cloudflareZonesLoading ? t('fileViewer.cloudflareZonesLoading') : t('fileViewer.cloudflareZonesRefresh')}
-                    </button>
+                    </div>
                   </div>
                   {cloudflareZonesError ? (
                     <p className="deploy-error">{cloudflareZonesError}</p>
@@ -7462,9 +7654,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                     <p className="hint">{t('fileViewer.cloudflareZonesLoading')}</p>
                   ) : deployConfig?.configured && cloudflareZones.length === 0 ? (
                     <p className="hint">{t('fileViewer.cloudflareZonesEmpty')}</p>
-                  ) : (
-                    <p className="hint">{t('fileViewer.cloudflareCustomDomainHint')}</p>
-                  )}
+                  ) : null}
                   {cloudflareDomainPrefix.trim() && !isValidCloudflareDomainPrefixInput(cloudflareDomainPrefix) ? (
                     <p className="deploy-error">{t('fileViewer.cloudflareDomainPrefixInvalid')}</p>
                   ) : cloudflareHostnamePreview ? (
@@ -7476,7 +7666,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
               ) : (
                 <div className="deploy-field-grid">
                   <label>
-                    <span>{t('fileViewer.vercelTeamId')}</span>
+                    <span className="deploy-field-title">{t('fileViewer.vercelTeamId')}</span>
                     <input
                       value={teamId}
                       placeholder={t('fileViewer.optional')}
@@ -7484,7 +7674,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                     />
                   </label>
                   <label>
-                    <span>{t('fileViewer.vercelTeamSlug')}</span>
+                    <span className="deploy-field-title">{t('fileViewer.vercelTeamSlug')}</span>
                     <input
                       value={teamSlug}
                       placeholder={t('fileViewer.optional')}
@@ -7493,7 +7683,6 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                   </label>
                 </div>
               )}
-              <p className="hint">{t(deployProvider.previewHintKey)}</p>
               {deployError ? <p className="deploy-error">{deployError}</p> : null}
               {!deployError
                 && deployPhase === 'idle'
@@ -7614,6 +7803,25 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
           ttlMs={3600}
           onDismiss={() => setDeploySavedToast(null)}
         />
+      ) : null}
+      {deployActionToast && typeof document !== 'undefined' ? createPortal(
+        <Toast
+          message={deployActionToast}
+          placement="top"
+          ttlMs={2400}
+          role="alert"
+          onDismiss={() => setDeployActionToast(null)}
+        />,
+        document.body,
+      ) : null}
+      {shareGuideToast && typeof document !== 'undefined' ? createPortal(
+        <Toast
+          message={shareGuideToast}
+          placement="top"
+          ttlMs={2200}
+          onDismiss={() => setShareGuideToast(null)}
+        />,
+        document.body,
       ) : null}
     </div>
   );

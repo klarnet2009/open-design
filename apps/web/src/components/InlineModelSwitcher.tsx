@@ -707,18 +707,6 @@ export function InlineModelSwitcher({
             </>
           )}
 
-          <button
-            type="button"
-            className="inline-switcher__more"
-            data-testid="inline-model-switcher-open-settings"
-            onClick={() => {
-              setOpen(false);
-              onOpenSettings?.('execution');
-            }}
-          >
-            <Icon name="settings" size={13} />
-            <span>{t('inlineSwitcher.openFullSettings')}</span>
-          </button>
         </div>
       ) : null}
     </div>
