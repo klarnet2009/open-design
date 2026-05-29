@@ -94,68 +94,37 @@
    Recent projects strip
    ================================================================ */
 
-.recent-projects__row > * {
-  animation: od-fade-slide-up 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+.recent-projects__row {
+  animation: od-fade-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
-.recent-projects__row > *:nth-child(1) { animation-delay: 40ms; }
-.recent-projects__row > *:nth-child(2) { animation-delay: 80ms; }
-.recent-projects__row > *:nth-child(3) { animation-delay: 120ms; }
-.recent-projects__row > *:nth-child(4) { animation-delay: 160ms; }
-.recent-projects__row > *:nth-child(5) { animation-delay: 200ms; }
-.recent-projects__row > *:nth-child(6) { animation-delay: 240ms; }
 
 /* ================================================================
    Plugin cards grid
    ================================================================ */
 
-.plugins-home__grid > * {
-  animation: od-fade-slide-up 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
+.plugins-home__grid {
+  animation: od-fade-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
-.plugins-home__grid > *:nth-child(1)  { animation-delay: 30ms; }
-.plugins-home__grid > *:nth-child(2)  { animation-delay: 60ms; }
-.plugins-home__grid > *:nth-child(3)  { animation-delay: 90ms; }
-.plugins-home__grid > *:nth-child(4)  { animation-delay: 120ms; }
-.plugins-home__grid > *:nth-child(5)  { animation-delay: 150ms; }
-.plugins-home__grid > *:nth-child(6)  { animation-delay: 180ms; }
-.plugins-home__grid > *:nth-child(n+7) { animation-delay: 200ms; }
 
 /* ================================================================
    Design grid
    ================================================================ */
 
-.design-grid > * {
-  animation: od-fade-slide-up 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
+.design-grid {
+  animation: od-fade-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
-.design-grid > *:nth-child(1) { animation-delay: 30ms; }
-.design-grid > *:nth-child(2) { animation-delay: 60ms; }
-.design-grid > *:nth-child(3) { animation-delay: 90ms; }
-.design-grid > *:nth-child(4) { animation-delay: 120ms; }
-.design-grid > *:nth-child(5) { animation-delay: 150ms; }
-.design-grid > *:nth-child(6) { animation-delay: 180ms; }
-.design-grid > *:nth-child(n+7) { animation-delay: 200ms; }
 
-/* Design kanban columns stagger */
-.design-kanban-board > * {
-  animation: od-fade-slide-up 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+.design-kanban-board {
+  animation: od-fade-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
-.design-kanban-board > *:nth-child(1) { animation-delay: 40ms; }
-.design-kanban-board > *:nth-child(2) { animation-delay: 80ms; }
-.design-kanban-board > *:nth-child(3) { animation-delay: 120ms; }
-.design-kanban-board > *:nth-child(4) { animation-delay: 160ms; }
-.design-kanban-board > *:nth-child(5) { animation-delay: 200ms; }
 
 /* ================================================================
    Automations template grid
    ================================================================ */
 
-.automations-templates__grid > * {
-  animation: od-fade-slide-up 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
+.automations-templates__grid {
+  animation: od-fade-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
-.automations-templates__grid > *:nth-child(1) { animation-delay: 30ms; }
-.automations-templates__grid > *:nth-child(2) { animation-delay: 60ms; }
-.automations-templates__grid > *:nth-child(3) { animation-delay: 90ms; }
-.automations-templates__grid > *:nth-child(4) { animation-delay: 120ms; }
-.automations-templates__grid > *:nth-child(n+5) { animation-delay: 150ms; }
 
 /* ================================================================
    Integrations view
@@ -220,9 +189,6 @@
    Live artifact badges
    ================================================================ */
 
-.live-artifact-badge {
-  animation: od-fade-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
 
 /* ================================================================
    Chat pane
@@ -232,14 +198,9 @@
   animation: od-fade-in 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
-.chat-history-list > * {
-  animation: od-fade-slide-up 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+.chat-history-list {
+  animation: od-fade-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
-.chat-history-list > *:nth-child(1) { animation-delay: 20ms; }
-.chat-history-list > *:nth-child(2) { animation-delay: 40ms; }
-.chat-history-list > *:nth-child(3) { animation-delay: 60ms; }
-.chat-history-list > *:nth-child(4) { animation-delay: 80ms; }
-.chat-history-list > *:nth-child(n+5) { animation-delay: 100ms; }
 
 /* ================================================================
    File viewer & workspace
@@ -269,13 +230,9 @@
   animation: od-slide-left 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
-.comment-side-list > * {
-  animation: od-fade-slide-up 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+.comment-side-list {
+  animation: od-fade-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
-.comment-side-list > *:nth-child(1) { animation-delay: 30ms; }
-.comment-side-list > *:nth-child(2) { animation-delay: 60ms; }
-.comment-side-list > *:nth-child(3) { animation-delay: 90ms; }
-.comment-side-list > *:nth-child(n+4) { animation-delay: 120ms; }
 
 /* ================================================================
    Settings dialog
@@ -305,10 +262,6 @@
   animation: od-fade-slide-up 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
-.memory-suggestion-card {
-  animation: od-fade-slide-up 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
 .memory-management-panel {
   animation: od-fade-slide-up 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
@@ -317,25 +270,17 @@
    MCP section
    ================================================================ */
 
-.mcp-rows > * {
-  animation: od-fade-slide-up 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+.mcp-rows {
+  animation: od-fade-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
-.mcp-rows > *:nth-child(1) { animation-delay: 20ms; }
-.mcp-rows > *:nth-child(2) { animation-delay: 40ms; }
-.mcp-rows > *:nth-child(3) { animation-delay: 60ms; }
-.mcp-rows > *:nth-child(n+4) { animation-delay: 80ms; }
 
 .mcp-picker {
   animation: od-fade-slide-up 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
-.mcp-picker-grid > * {
-  animation: od-fade-slide-up 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+.mcp-picker-grid {
+  animation: od-fade-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
-.mcp-picker-grid > *:nth-child(1) { animation-delay: 20ms; }
-.mcp-picker-grid > *:nth-child(2) { animation-delay: 40ms; }
-.mcp-picker-grid > *:nth-child(3) { animation-delay: 60ms; }
-.mcp-picker-grid > *:nth-child(n+4) { animation-delay: 80ms; }
 
 /* ================================================================
    Marketplace
@@ -345,16 +290,9 @@
   animation: od-fade-slide-up 300ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
-.marketplace-view__grid > * {
-  animation: od-fade-slide-up 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
+.marketplace-view__grid {
+  animation: od-fade-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
-.marketplace-view__grid > *:nth-child(1)  { animation-delay: 30ms; }
-.marketplace-view__grid > *:nth-child(2)  { animation-delay: 60ms; }
-.marketplace-view__grid > *:nth-child(3)  { animation-delay: 90ms; }
-.marketplace-view__grid > *:nth-child(4)  { animation-delay: 120ms; }
-.marketplace-view__grid > *:nth-child(5)  { animation-delay: 150ms; }
-.marketplace-view__grid > *:nth-child(6)  { animation-delay: 180ms; }
-.marketplace-view__grid > *:nth-child(n+7) { animation-delay: 200ms; }
 
 .marketplace-view__empty {
   animation: od-fade-in 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
@@ -368,13 +306,6 @@
   animation: od-fade-slide-up 300ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
-.library-ds-card {
-  animation: od-fade-slide-up 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
-.ds-card {
-  animation: od-fade-slide-up 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
 
 .library-preview {
   animation: od-fade-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
@@ -388,9 +319,6 @@
   animation: od-fade-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
-.df-file-row {
-  animation: od-fade-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
 
 /* ================================================================
    Workspace tabs
@@ -432,9 +360,6 @@
    Comment card
    ================================================================ */
 
-.comment-card {
-  animation: od-fade-slide-up 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
 
 /* ================================================================
    Plugin action panel (right side)
@@ -457,25 +382,14 @@
    Automation / routine history rows
    ================================================================ */
 
-.automation-history__row {
-  animation: od-fade-slide-up 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
 .automation-history {
-  animation: od-fade-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
-.routines-item {
-  animation: od-fade-slide-up 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: od-fade-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
 /* ================================================================
    Example cards (ExamplesTab)
    ================================================================ */
 
-.example-card {
-  animation: od-fade-slide-up 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
 
 /* ================================================================
    Entry sections (Home tabs)
@@ -501,25 +415,11 @@
    Agent / model cards
    ================================================================ */
 
-.agent-card {
-  animation: od-fade-slide-up 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
-.agent-scan-card {
-  animation: od-scale-in 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
 
 /* ================================================================
    Connector drawer & sections
    ================================================================ */
 
-.connector-drawer-section > * {
-  animation: od-fade-slide-up 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
-.connector-drawer-tool {
-  animation: od-fade-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
 
 /* ================================================================
    Error / alert banners
@@ -545,13 +445,9 @@
    Skills section rows
    ================================================================ */
 
-.skills-rows > * {
-  animation: od-fade-slide-up 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+.skills-rows {
+  animation: od-fade-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
-.skills-rows > *:nth-child(1) { animation-delay: 20ms; }
-.skills-rows > *:nth-child(2) { animation-delay: 40ms; }
-.skills-rows > *:nth-child(3) { animation-delay: 60ms; }
-.skills-rows > *:nth-child(n+4) { animation-delay: 80ms; }
 
 /* ================================================================
    Onboarding / new project panels
@@ -569,46 +465,24 @@
    Design system detail / evidence / revision
    ================================================================ */
 
-.ds-revision-card {
-  animation: od-fade-slide-up 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
 .ds-evidence-panel {
   animation: od-slide-left 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
-.ds-resource-row {
-  animation: od-fade-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
 /* ================================================================
    Share menu items
    ================================================================ */
 
-.share-menu-item {
-  animation: od-fade-slide-up 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
 
 /* ================================================================
    Staged rows (attachments, files)
    ================================================================ */
 
-.staged-row {
-  animation: od-fade-slide-up 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
-.staged-preview-card {
-  animation: od-scale-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
 
 /* ================================================================
    Mention / slash autocomplete items
    ================================================================ */
 
-.mention-item,
-.slash-item {
-  animation: od-fade-in 120ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
 
 /* ================================================================
    Plugin hover card
@@ -654,10 +528,6 @@
    Orbit automation rows
    ================================================================ */
 
-.orbit-automation-row {
-  animation: od-fade-slide-up 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
 .orbit-automation-lock-banner {
   animation: od-fade-slide-down 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
@@ -666,9 +536,6 @@
    Notification cards in settings
    ================================================================ */
 
-.settings-notify-card {
-  animation: od-fade-slide-up 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
 
 /* ================================================================
    Plugin detail view
@@ -682,9 +549,6 @@
    DS picker items
    ================================================================ */
 
-.ds-picker-item {
-  animation: od-fade-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
 
 /* ================================================================
    Generic button press feedback
