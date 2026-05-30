@@ -496,7 +496,7 @@ export const fr: Dict = {
   'workingDirPicker.openUnavailable': 'Ouvrez ce projet dans l’app desktop pour afficher le dossier.',
   'workingDirPicker.openFailed': 'Impossible d’afficher ce dossier',
   'workingDirPicker.showInFileManager': 'Afficher dans le gestionnaire de fichiers',
-  'workingDirPicker.replace': 'Effacer et remplacer le dossier…',
+  'workingDirPicker.replace': 'Remplacer le dossier…',
   'workingDirPicker.recent': 'Dossiers récents',
   'handoff.toTarget': 'Transférer vers {target}',
   'handoff.action': 'Transférer',

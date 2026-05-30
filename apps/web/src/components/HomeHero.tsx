@@ -107,6 +107,9 @@ interface Props {
   contextItemCount: number;
   error: string | null;
   showActivePluginChip?: boolean;
+  workingDir?: string | null;
+  onPickWorkingDir?: () => void;
+  onClearWorkingDir?: () => void;
 }
 
 interface HomeHeroDesignSystemOption {
@@ -192,6 +195,9 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     contextItemCount,
     error,
     showActivePluginChip = true,
+    workingDir = null,
+    onPickWorkingDir,
+    onClearWorkingDir,
   },
   ref,
 ) {
@@ -1078,6 +1084,31 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
             >
               <Icon name="attach" size={15} />
             </button>
+            {onPickWorkingDir ? (
+              <div className="home-hero__working-dir-wrap">
+                <button
+                  type="button"
+                  className={`home-hero__working-dir${workingDir ? ' picked' : ''}`}
+                  onClick={onPickWorkingDir}
+                  title={workingDir ?? t('workingDirPicker.select')}
+                >
+                  <Icon name="folder" size={13} />
+                  <span>
+                    {workingDir ? workingDir.split('/').filter(Boolean).pop() : t('workingDirPicker.select')}
+                  </span>
+                </button>
+                {workingDir ? (
+                  <button
+                    type="button"
+                    className="home-hero__working-dir-clear"
+                    onClick={() => onClearWorkingDir?.()}
+                    aria-label={t('workingDirPicker.clearAria')}
+                  >
+                    <Icon name="close" size={10} />
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             {activeCreateChip ? (
               <ActiveTypeChip chip={activeCreateChip} onClear={onClearActiveChip} />
             ) : null}

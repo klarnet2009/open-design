@@ -48,6 +48,7 @@ import {
   fetchPromptTemplates,
   fetchSkills,
   uploadProjectFiles,
+  replaceProjectWorkingDir,
 } from './providers/registry';
 import { RUNS_CHANGED_EVENT, listProjectRuns } from './providers/daemon';
 import { navigate, useRoute } from './router';
@@ -832,6 +833,7 @@ function AppInner() {
         autoSendFirstMessage?: boolean;
         requestId?: string;
         pendingFiles?: File[];
+        userWorkingDirToken?: string;
       },
     ): Promise<boolean> => {
       // Honor an explicit `null` design system — the create panel defaults
@@ -902,6 +904,18 @@ function AppInner() {
             ? { error_code: uploadResult.error }
             : {}),
         });
+      }
+      const userWorkingDir = input.metadata?.userWorkingDir;
+      if (userWorkingDir) {
+        try {
+          await replaceProjectWorkingDir(
+            result.project.id,
+            userWorkingDir,
+            input.userWorkingDirToken,
+          );
+        } catch (err) {
+          console.warn('Failed to set working directory for new project', userWorkingDir, err);
+        }
       }
       trackProjectCreateResult(
         analytics.track,

@@ -32,7 +32,7 @@ export const zhTW: Dict = {
   'workingDirPicker.openUnavailable': "請在桌面版中開啟此專案以顯示資料夾。",
   'workingDirPicker.openFailed': "無法顯示此資料夾",
   'workingDirPicker.showInFileManager': "在檔案管理器中顯示",
-  'workingDirPicker.replace': "清空並替換目錄…",
+  'workingDirPicker.replace': "替換目錄…",
   'workingDirPicker.recent': "最近使用的目錄",
   'handoff.toTarget': '交付給 {target}',
   'handoff.openInTarget': '在 {target} 中開啟',

@@ -41,7 +41,8 @@ import {
   localizeSkillPrompt,
 } from '../i18n/content';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
-import { fetchProjectFiles, projectFileUrl } from '../providers/registry';
+import { fetchProjectFiles, openFolderDialog, projectFileUrl } from '../providers/registry';
+import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type {
   DesignSystemSummary,
   Project,
@@ -236,6 +237,11 @@ export function HomeView({
   const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
   const [selectedConnectorContexts, setSelectedConnectorContexts] = useState<SelectedConnectorContext[]>([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  const [workingDir, setWorkingDir] = useState<string | null>(null);
+  // Token paired with `workingDir` when picked through the desktop host's
+  // native dialog. Spent on the post-creation working-dir POST so the
+  // daemon's desktop-auth gate accepts the path. Null for web picks.
+  const [workingDirToken, setWorkingDirToken] = useState<string | null>(null);
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
   const [mcpLoading, setMcpLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
@@ -926,6 +932,24 @@ export function HomeView({
     setStagedFiles((current) => current.filter((_, i) => i !== index));
   }
 
+  async function handlePickWorkingDir() {
+    // On desktop the working-dir POST is gated behind a host-minted token, so
+    // pick through the host bridge to capture { baseDir, token } together.
+    if (isOpenDesignHostAvailable()) {
+      const result = await pickHostWorkingDir();
+      if (result.ok) {
+        setWorkingDir(result.baseDir);
+        setWorkingDirToken(result.token);
+      }
+      return;
+    }
+    const picked = await openFolderDialog();
+    if (picked) {
+      setWorkingDir(picked);
+      setWorkingDirToken(null);
+    }
+  }
+
   function updateActiveInputs(next: Record<string, unknown>) {
     if (!active) return;
     const normalized = active.mediaSurface
@@ -1271,6 +1295,8 @@ export function HomeView({
       contextMcpServers,
       contextConnectors,
       attachments: stagedFiles,
+      ...(workingDir ? { workingDir } : {}),
+      ...(workingDirToken ? { workingDirToken } : {}),
     });
   }
 
@@ -1330,6 +1356,12 @@ export function HomeView({
         onPickChip={pickChip}
         contextItemCount={contextItemCount}
         error={error}
+        workingDir={workingDir}
+        onPickWorkingDir={handlePickWorkingDir}
+        onClearWorkingDir={() => {
+          setWorkingDir(null);
+          setWorkingDirToken(null);
+        }}
       />
 
       <RecentProjectsStrip

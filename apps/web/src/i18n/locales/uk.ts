@@ -32,7 +32,7 @@ export const uk: Dict = {
   'workingDirPicker.openUnavailable': "Open this project in the desktop app to show the folder.",
   'workingDirPicker.openFailed': "Could not show this folder",
   'workingDirPicker.showInFileManager': "Show in file manager",
-  'workingDirPicker.replace': "Clear and replace directory…",
+  'workingDirPicker.replace': "Replace directory…",
   'workingDirPicker.recent': "Recent directories",
   'handoff.toTarget': 'Hand off to {target}',
   'handoff.action': 'Hand off',

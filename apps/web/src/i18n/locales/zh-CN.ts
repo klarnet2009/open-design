@@ -540,7 +540,7 @@ export const zhCN: Dict = {
   'workingDirPicker.openUnavailable': '请在桌面版中打开此项目以显示文件夹。',
   'workingDirPicker.openFailed': '无法显示此文件夹',
   'workingDirPicker.showInFileManager': '在文件管理器中显示',
-  'workingDirPicker.replace': '清空并替换目录…',
+  'workingDirPicker.replace': '替换目录…',
   'workingDirPicker.recent': '最近使用的目录',
   'handoff.toTarget': '交付给 {target}',
   'handoff.openInTarget': '在 {target} 中打开',

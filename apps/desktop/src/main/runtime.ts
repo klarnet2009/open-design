@@ -1045,6 +1045,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.removeHandler("dialog:pick-folder");
   ipcMain.removeHandler("dialog:pick-and-import");
   ipcMain.removeHandler("dialog:pick-and-replace-working-dir");
+  ipcMain.removeHandler("dialog:pick-working-dir");
   ipcMain.removeHandler("shell:open-external");
   ipcMain.removeHandler("shell:open-path");
   for (const channel of UPDATER_IPC_CHANNELS) {
@@ -1098,7 +1099,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (!apiBaseUrl) {
         return { ok: false, reason: "daemon API URL not available" };
       }
-      const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+      const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
       if (result.canceled || result.filePaths.length === 0) {
         return { ok: false, canceled: true };
       }
@@ -1141,7 +1142,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (!apiBaseUrl) {
         return { ok: false, reason: "daemon API URL not available" };
       }
-      const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+      const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
       if (result.canceled || result.filePaths.length === 0) {
         return { ok: false, canceled: true };
       }
@@ -1158,6 +1159,27 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       });
     },
   );
+  // Home-flow counterpart: the project does not exist yet, so we only show
+  // the native picker and mint a token bound to the chosen folder. The
+  // renderer threads { baseDir, token } back through project creation and
+  // spends the token on POST /api/projects/:id/working-dir once the project
+  // exists. Main remains the single source of filesystem paths crossing into
+  // the daemon (same trust boundary as dialog:pick-and-replace-working-dir).
+  ipcMain.handle("dialog:pick-working-dir", async () => {
+    if (options.desktopAuthSecret == null) {
+      return { ok: false, reason: "desktop auth secret not registered" };
+    }
+    const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { ok: false, canceled: true };
+    }
+    const baseDir = result.filePaths[0].trim();
+    if (baseDir.length === 0) {
+      return { ok: false, reason: "picker returned an empty path" };
+    }
+    const token = mintImportToken(options.desktopAuthSecret, baseDir);
+    return { baseDir, ok: true, token };
+  });
   // shell.openPath opens an absolute filesystem path in the OS file
   // manager (Finder / Explorer / Files). It resolves to '' on success
   // and to a non-empty error string on failure (per Electron's
