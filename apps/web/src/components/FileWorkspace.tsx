@@ -58,6 +58,9 @@ import {
   parseSketchWorkspaceDocument,
   type SketchItem,
 } from './sketch-model';
+import { GenerationPreviewStage } from './GenerationPreviewStage';
+import { buildGenerationPreviewState } from '../runtime/generation-preview';
+import type { ChatMessage } from '../types';
 
 interface Props {
   projectId: string;
@@ -114,6 +117,10 @@ interface Props {
   githubConnected?: boolean;
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
+  messages?: ChatMessage[];
+  artifactHtml?: string | null;
+  conversationError?: string | null;
+  onRetry?: (message: ChatMessage) => void;
 }
 
 interface SketchState {
@@ -234,6 +241,10 @@ export function FileWorkspace({
   githubConnected,
   commentPortalId,
   onCommentModeChange,
+  messages = [],
+  artifactHtml,
+  conversationError,
+  onRetry,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -276,6 +287,21 @@ export function FileWorkspace({
   const liveArtifactEntries = useMemo(
     () => liveArtifacts.map(liveArtifactSummaryToWorkspaceEntry),
     [liveArtifacts],
+  );
+
+  const generationPreview = useMemo(
+    () =>
+      buildGenerationPreviewState({
+        designSystemProject: Boolean(designSystemProject),
+        messages,
+        streaming: Boolean(streaming),
+        activeTab,
+        projectFiles: visibleFiles,
+        liveArtifacts,
+        artifactHtml,
+        conversationError,
+      }),
+    [designSystemProject, messages, streaming, activeTab, visibleFiles, liveArtifacts, artifactHtml, conversationError],
   );
 
   // Pull the persisted active tab in when the parent's hydration completes
@@ -979,6 +1005,15 @@ export function FileWorkspace({
             onUseDesignSystem={onUseDesignSystem}
             onConnectRepo={onConnectRepo}
             githubConnected={githubConnected}
+          />
+        ) : generationPreview ? (
+          <GenerationPreviewStage
+            model={generationPreview}
+            onRetry={
+              generationPreview.retryTarget && onRetry
+                ? () => onRetry(generationPreview.retryTarget!)
+                : undefined
+            }
           />
         ) : activeTab === DESIGN_FILES_TAB ? (
           <DesignFilesPanel

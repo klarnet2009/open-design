@@ -364,7 +364,7 @@
 .df-row-icon[data-kind="text"] { background: var(--bg-subtle); color: var(--text-muted); }
 .df-row-icon[data-kind="sketch"] { background: var(--purple-bg); color: var(--purple); }
 .df-row-icon[data-kind="stylesheet"] { background: var(--blue-bg); color: var(--blue, var(--accent-strong)); }
-.df-row-name-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.df-row-name-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 100%; }
 .df-row-name {
   font-size: 13px;
   font-weight: 500;
@@ -372,6 +372,12 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* `max-width: 100%` on a flex child pairs with the wrap's
+     `min-width: 0` so the long filename collapses to the cell width
+     instead of pushing the kind / mtime / menu columns off-screen
+     (#3260). */
+  max-width: 100%;
+  min-width: 0;
 }
 .df-rename-input {
   width: 100%;
