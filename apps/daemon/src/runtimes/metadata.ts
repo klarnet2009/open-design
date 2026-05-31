@@ -7,6 +7,10 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://github.com/nexu-io/vela',
     docsUrl: 'https://github.com/nexu-io/open-design/blob/main/docs/new-agent-runtime-acp.md',
   },
+  antigravity: {
+    installUrl: 'https://antigravity.google/cli',
+    docsUrl: 'https://antigravity.google/docs/cli-overview',
+  },
   claude: {
     installUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup',
     docsUrl: 'https://docs.anthropic.com/en/docs/claude-code',

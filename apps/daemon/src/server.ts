@@ -4536,7 +4536,10 @@ export async function startServer({
     }
     try {
       const { launchAgentInSystemTerminal } = await import('./runtimes/terminal-launch.js');
-      const result = await launchAgentInSystemTerminal('agy');
+      const agentDef = getAgentDef('antigravity');
+      const resolvedLaunch = agentDef ? resolveAgentLaunch(agentDef, process.env) : null;
+      const command = resolvedLaunch?.launchPath || 'agy';
+      const result = await launchAgentInSystemTerminal(command);
       if (result.ok) {
         return res.json({ ok: true, platform: result.platform, via: result.via });
       }

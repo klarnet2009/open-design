@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import { relative, resolve } from 'node:path';
 import {
-  assert, chmodSync, claude, deepseek, gemini, join, minimalAgentDef, mkdirSync, mkdtempSync, resolveAgentExecutable, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
+  assert, antigravity, chmodSync, claude, deepseek, gemini, join, minimalAgentDef, mkdirSync, mkdtempSync, resolveAgentExecutable, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 
 const fsTest = process.platform === 'win32' ? test.skip : test;
@@ -35,6 +35,47 @@ test('deepseek entry declares codewhale as a fallback bin (issue #2983)', () => 
     `deepseek.fallbackBins must include 'codewhale'; got ${JSON.stringify(deepseek.fallbackBins)}`,
   );
 });
+
+test('antigravity entry declares fallback bins', () => {
+  assert.ok(
+    Array.isArray(antigravity.fallbackBins),
+    'antigravity.fallbackBins must be an array',
+  );
+  assert.ok(
+    antigravity.fallbackBins.includes('antigravitycli'),
+    `antigravity.fallbackBins must include 'antigravitycli'; got ${JSON.stringify(antigravity.fallbackBins)}`,
+  );
+  assert.ok(
+    antigravity.fallbackBins.includes('antigravity-cli'),
+    `antigravity.fallbackBins must include 'antigravity-cli'; got ${JSON.stringify(antigravity.fallbackBins)}`,
+  );
+});
+
+fsTest(
+  'resolveAgentExecutable prefers configured ANTIGRAVITY_BIN over default path resolution',
+  () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-antigravity-built-in-precedence-'));
+    try {
+      return withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'ANTIGRAVITY_BIN'], () => {
+        const configuredAgy = join(root, 'configured', 'agy');
+        mkdirSync(join(root, 'configured'), { recursive: true });
+        writeFileSync(configuredAgy, '#!/bin/sh\nexit 0\n');
+        chmodSync(configuredAgy, 0o755);
+        process.env.PATH = '';
+        process.env.OD_AGENT_HOME = join(root, 'empty-home');
+
+        const resolved = resolveAgentExecutable(
+          antigravity,
+          { ANTIGRAVITY_BIN: configuredAgy },
+        );
+
+        assert.equal(resolved, configuredAgy);
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
 
 // resolveAgentExecutable touches the filesystem via existsSync; on
 // Windows resolveOnPath also walks PATHEXT extensions, which our fixture

@@ -168,8 +168,9 @@ export async function waitForAgyToReadModel(
 
 export const antigravityAgentDef = {
   id: 'antigravity',
-  name: 'Antigravity',
+  name: 'Antigravity CLI',
   bin: 'agy',
+  fallbackBins: ['antigravity-cli', 'antigravitycli'],
   versionArgs: ['--version'],
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
