@@ -852,6 +852,8 @@ export const de: Dict = {
   'workspace.sideChatDefaultTitle': 'Seiten-Chat',
   'workspace.newTerminal': 'Neues Terminal',
   'workspace.newTerminalDescription': 'Eine Shell im Projektverzeichnis in einem neuen Tab öffnen',
+  'workspace.terminalStarting': 'Terminal wird gestartet…',
+  'workspace.terminalStartingDescription': 'Projektshell wird vorbereitet. Das dauert normalerweise nur ein paar Sekunden.',
   'workspace.terminalSessionEnded': 'Sitzung beendet',
   'workspace.terminalReconnecting': 'Verbindung wird wiederhergestellt…',
   'workspace.terminalStartFailed': 'Terminalsitzung konnte nicht gestartet werden',

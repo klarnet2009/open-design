@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Terminal } from '@xterm/xterm';
+import type { ITheme, Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
 import type { TerminalDataEvent, TerminalExitEvent } from '@open-design/contracts';
 import { useT } from '../../i18n';
@@ -22,6 +22,111 @@ interface Props {
 }
 
 type Phase = 'connecting' | 'live' | 'reconnecting' | 'ended' | 'unavailable';
+type CssTerminalThemeKey = Exclude<keyof ITheme, 'extendedAnsi'>;
+
+const TERMINAL_THEME_VARS = {
+  foreground: '--terminal-fg',
+  background: '--terminal-bg',
+  cursor: '--terminal-cursor',
+  cursorAccent: '--terminal-cursor-accent',
+  selectionBackground: '--terminal-selection-bg',
+  selectionForeground: '--terminal-selection-fg',
+  selectionInactiveBackground: '--terminal-selection-inactive-bg',
+  black: '--terminal-ansi-black',
+  red: '--terminal-ansi-red',
+  green: '--terminal-ansi-green',
+  yellow: '--terminal-ansi-yellow',
+  blue: '--terminal-ansi-blue',
+  magenta: '--terminal-ansi-magenta',
+  cyan: '--terminal-ansi-cyan',
+  white: '--terminal-ansi-white',
+  brightBlack: '--terminal-ansi-bright-black',
+  brightRed: '--terminal-ansi-bright-red',
+  brightGreen: '--terminal-ansi-bright-green',
+  brightYellow: '--terminal-ansi-bright-yellow',
+  brightBlue: '--terminal-ansi-bright-blue',
+  brightMagenta: '--terminal-ansi-bright-magenta',
+  brightCyan: '--terminal-ansi-bright-cyan',
+  brightWhite: '--terminal-ansi-bright-white',
+} as const satisfies Record<CssTerminalThemeKey, string>;
+
+const FALLBACK_TERMINAL_THEME: Required<Pick<ITheme, CssTerminalThemeKey>> = {
+  foreground: '#e6e1d9',
+  background: '#1e1e1e',
+  cursor: '#e6e1d9',
+  cursorAccent: '#1e1e1e',
+  selectionBackground: 'rgba(96, 165, 250, 0.32)',
+  selectionForeground: '#ffffff',
+  selectionInactiveBackground: 'rgba(148, 163, 184, 0.22)',
+  black: '#1f2328',
+  red: '#ff7b72',
+  green: '#7ee787',
+  yellow: '#d29922',
+  blue: '#79c0ff',
+  magenta: '#d2a8ff',
+  cyan: '#56d4dd',
+  white: '#e6edf3',
+  brightBlack: '#6e7681',
+  brightRed: '#ffa198',
+  brightGreen: '#7ee787',
+  brightYellow: '#e3b341',
+  brightBlue: '#a5d6ff',
+  brightMagenta: '#d2a8ff',
+  brightCyan: '#7ee7f2',
+  brightWhite: '#ffffff',
+};
+
+function terminalThemeFromCss(element: HTMLElement): ITheme {
+  const styles = getComputedStyle(element);
+  const theme: ITheme = {};
+  for (const key of Object.keys(TERMINAL_THEME_VARS) as Array<keyof typeof TERMINAL_THEME_VARS>) {
+    theme[key] = styles.getPropertyValue(TERMINAL_THEME_VARS[key]).trim() || FALLBACK_TERMINAL_THEME[key];
+  }
+  return theme;
+}
+
+function subscribeToAppearanceChanges(onChange: () => void): () => void {
+  const root = document.documentElement;
+  const media =
+    typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-color-scheme: dark)')
+      : null;
+  let frame: number | null = null;
+  const cancelScheduled = () => {
+    if (frame == null) return;
+    if (typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(frame);
+    } else {
+      window.clearTimeout(frame);
+    }
+    frame = null;
+  };
+  const schedule = () => {
+    cancelScheduled();
+    frame =
+      typeof window.requestAnimationFrame === 'function'
+        ? window.requestAnimationFrame(onChange)
+        : window.setTimeout(onChange, 0);
+  };
+  const observer = new MutationObserver(schedule);
+  observer.observe(root, { attributes: true, attributeFilter: ['data-theme', 'style'] });
+
+  if (media && typeof media.addEventListener === 'function') {
+    media.addEventListener('change', schedule);
+  } else if (media) {
+    media.addListener(schedule);
+  }
+
+  return () => {
+    cancelScheduled();
+    observer.disconnect();
+    if (media && typeof media.removeEventListener === 'function') {
+      media.removeEventListener('change', schedule);
+    } else if (media) {
+      media.removeListener(schedule);
+    }
+  };
+}
 
 /**
  * xterm.js surface bound to a daemon PTY session (Stage 3, `terminal:<id>` tab).
@@ -95,6 +200,7 @@ export function TerminalViewer({ terminalId, projectId, onClose }: Props) {
     let observer: ResizeObserver | null = null;
     let source: EventSource | null = null;
     let dataSub: { dispose: () => void } | null = null;
+    let appearanceCleanup: (() => void) | null = null;
 
     void (async () => {
       // Lazy import — see the component docblock for why xterm must not be
@@ -114,7 +220,7 @@ export function TerminalViewer({ terminalId, projectId, onClose }: Props) {
         fontSize: 13,
         fontFamily:
           'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
-        theme: { background: '#1e1e1e' },
+        theme: terminalThemeFromCss(container),
         // The daemon owns scrollback semantics via PTY output; a generous local
         // buffer keeps long sessions scrollable without a round-trip.
         scrollback: 5000,
@@ -124,6 +230,11 @@ export function TerminalViewer({ terminalId, projectId, onClose }: Props) {
       xterm.open(container);
       termRef.current = xterm;
       fitRef.current = fit;
+      appearanceCleanup = subscribeToAppearanceChanges(() => {
+        const nextContainer = surfaceRef.current;
+        if (!nextContainer) return;
+        xterm.options.theme = terminalThemeFromCss(nextContainer);
+      });
 
       // Initial fit, then sync the PTY to the measured geometry.
       applyFit();
@@ -188,6 +299,7 @@ export function TerminalViewer({ terminalId, projectId, onClose }: Props) {
       dataSub?.dispose();
       observer?.disconnect();
       source?.close();
+      appearanceCleanup?.();
       termRef.current?.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -217,11 +329,42 @@ export function TerminalViewer({ terminalId, projectId, onClose }: Props) {
   }, [projectId]);
 
   const stopped = phase === 'ended' || phase === 'unavailable';
+  const connecting = phase === 'connecting';
   const reconnecting = phase === 'reconnecting';
 
   return (
     <div className={styles.root} data-testid="terminal-viewer">
-      <div ref={surfaceRef} className={styles.surface} />
+      <div
+        ref={surfaceRef}
+        className={`${styles.surface} ${connecting ? styles.surfaceConnecting : ''}`}
+      />
+      {connecting ? (
+        <div
+          className={styles.loading}
+          role="status"
+          aria-live="polite"
+          data-testid="terminal-loading"
+        >
+          <div className={styles.loadingStack}>
+            <div className={styles.loadingPromptLine} aria-hidden>
+              <span className={styles.loadingPrompt}>$</span>
+              <span className={styles.loadingCommand}>open-design shell</span>
+              <span className={styles.loadingCursor} />
+            </div>
+            <div className={styles.loadingCopy}>
+              <span className={styles.loadingTitle}>{t('workspace.terminalStarting')}</span>
+              <span className={styles.loadingDescription}>
+                {t('workspace.terminalStartingDescription')}
+              </span>
+            </div>
+            <div className={styles.loadingRows} aria-hidden>
+              <span />
+              <span />
+              <span />
+            </div>
+          </div>
+        </div>
+      ) : null}
       {stopped ? (
         <div className={styles.banner} role="status">
           <span className={styles.bannerIcon} aria-hidden>

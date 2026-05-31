@@ -986,6 +986,8 @@ export const uk: Dict = {
   'workspace.sideChatDefaultTitle': 'Side chat',
   'workspace.newTerminal': 'New Terminal',
   'workspace.newTerminalDescription': 'Open a shell in the project directory in a new tab',
+  'workspace.terminalStarting': 'Запуск термінала…',
+  'workspace.terminalStartingDescription': 'Готуємо оболонку проєкту. Зазвичай це займає кілька секунд.',
   'workspace.terminalSessionEnded': 'Session ended',
   'workspace.terminalReconnecting': 'Reconnecting…',
   'workspace.terminalStartFailed': 'Could not start the terminal session',

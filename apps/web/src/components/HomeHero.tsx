@@ -67,8 +67,8 @@ interface Props {
   prompt: string;
   onPromptChange: (value: string) => void;
   onSubmit: HomeHeroSubmitHandler;
-  sessionMode: ChatSessionMode;
-  onSessionModeChange: (mode: ChatSessionMode) => void;
+  sessionMode?: ChatSessionMode;
+  onSessionModeChange?: (mode: ChatSessionMode) => void;
   activePluginTitle: string | null;
   activePluginRecord?: InstalledPluginRecord | null;
   activeChipId: string | null;
@@ -154,7 +154,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     prompt,
     onPromptChange,
     onSubmit,
-    sessionMode,
+    sessionMode = 'design',
     onSessionModeChange,
     activePluginTitle,
     activePluginRecord = null,

@@ -853,6 +853,8 @@ export const esES: Dict = {
   'workspace.sideChatDefaultTitle': 'Chat lateral',
   'workspace.newTerminal': 'Nueva terminal',
   'workspace.newTerminalDescription': 'Abrir un shell en el directorio del proyecto en una pestaña nueva',
+  'workspace.terminalStarting': 'Iniciando terminal…',
+  'workspace.terminalStartingDescription': 'Preparando el shell del proyecto. Normalmente tarda unos segundos.',
   'workspace.terminalSessionEnded': 'Sesión finalizada',
   'workspace.terminalReconnecting': 'Reconectando…',
   'workspace.terminalStartFailed': 'No se pudo iniciar la sesión de terminal',

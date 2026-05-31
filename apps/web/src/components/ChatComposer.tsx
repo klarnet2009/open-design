@@ -53,7 +53,7 @@ import { ANNOTATION_EVENT, type AnnotationEventDetail } from "./PreviewDrawOverl
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
-type ToolsTab = 'plugins' | 'skills' | 'mcp' | 'import' | 'pet';
+type ToolsTab = 'plugins' | 'skills' | 'mcp' | 'import';
 
 type MentionTab = 'all' | 'plugins' | 'skills' | 'mcp' | 'connectors' | 'files';
 
@@ -129,10 +129,8 @@ interface Props {
   // Opens settings on the External MCP tab. Wired from ChatPane → App.
   // The composer's `/mcp` slash command and the MCP picker button route here.
   onOpenMcpSettings?: () => void;
-  // Optional pet wiring — when present, the composer renders a small
-  // 🐾 button + popover so users can adopt / wake / tuck a pet without
-  // leaving chat. Typing `/pet` (or `/pet wake|tuck|<id>`) is parsed
-  // out of the draft and routed to the same handlers.
+  // Optional pet wiring. The composer no longer renders a visible pet
+  // entry, but existing manual `/pet` commands still route here.
   petConfig?: AppConfig['pet'];
   onAdoptPet?: (petId: string) => void;
   onTogglePet?: () => void;
@@ -278,8 +276,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const [detailsRecord, setDetailsRecord] = useState<InstalledPluginRecord | null>(null);
     const pluginsSectionRef = useRef<PluginsSectionHandle | null>(null);
     // Consolidated "tools" popover — a single dropdown anchored to the
-    // leading sliders icon that hosts MCP / Import / Pet quick actions and
-    // a shortcut to open the full Settings dialog. Replaces the previous
+    // leading sliders icon that hosts project context, MCP, Import actions,
+    // and a shortcut to open the full Settings dialog. Replaces the previous
     // row of three standalone buttons (which overflowed in narrow chats).
     const [toolsOpen, setToolsOpen] = useState(false);
     const [toolsTab, setToolsTab] = useState<ToolsTab>('plugins');
@@ -289,9 +287,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const toolsMenuRef = useRef<HTMLDivElement | null>(null);
     const toolsTriggerRef = useRef<HTMLButtonElement | null>(null);
     const petEnabled = Boolean(onAdoptPet && onTogglePet);
-    const [petMenuOpen, setPetMenuOpen] = useState(false);
-    const petWrapRef = useRef<HTMLDivElement | null>(null);
-    const [petMenuStyle, setPetMenuStyle] = useState<React.CSSProperties>({});
     const linkedDirs = projectMetadata?.linkedDirs ?? [];
     // initialDraft is only honored on the first non-empty value the parent
     // hands us. After we seed once, the composer is fully under user control
@@ -334,59 +329,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         document.removeEventListener('keydown', onKey);
       };
     }, [toolsOpen]);
-
-    useEffect(() => {
-      if (!petMenuOpen) return;
-      function onPointer(e: MouseEvent) {
-        const target = e.target as Node;
-        if (petWrapRef.current?.contains(target)) return;
-        setPetMenuOpen(false);
-      }
-      function onKey(e: KeyboardEvent) {
-        if (e.key === 'Escape') setPetMenuOpen(false);
-      }
-      document.addEventListener('mousedown', onPointer);
-      document.addEventListener('keydown', onKey);
-      return () => {
-        document.removeEventListener('mousedown', onPointer);
-        document.removeEventListener('keydown', onKey);
-      };
-    }, [petMenuOpen]);
-
-    // Viewport-aware pet menu positioning — flips the popover to stay
-    // within screen bounds instead of clipping at the edge.
-    useEffect(() => {
-      if (!petMenuOpen) return;
-      const wrap = petWrapRef.current;
-      if (!wrap) return;
-      const rect = wrap.getBoundingClientRect();
-      const menuW = 260;
-      const menuH = 200;
-      const gap = 6;
-      const viewW = window.innerWidth;
-      const viewH = window.innerHeight;
-      // Prefer opening upward (bottom of menu above the button).
-      // Flip downward when there isn't enough room above.
-      // When neither direction fits, clamp to viewport bounds.
-      let top: number;
-      if (rect.top >= menuH + gap) {
-        top = rect.top - menuH - gap;
-      } else if (rect.bottom + menuH + gap <= viewH) {
-        top = rect.bottom + gap;
-      } else {
-        top = Math.max(gap, viewH - menuH - gap);
-      }
-      // Right-align by default (menu right edge ≈ button right edge).
-      // Shift left when the menu would spill past the viewport left edge.
-      const left = Math.max(8, Math.min(viewW - menuW - 8, rect.right - menuW));
-      setPetMenuStyle({
-        position: 'fixed',
-        top,
-        left,
-        bottom: 'auto',
-        right: 'auto',
-      });
-    }, [petMenuOpen]);
 
     // Lazy-fetch the user's external MCP servers list once on mount so the
     // `/mcp …` slash palette and the composer's MCP button popover have
@@ -567,42 +509,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           argHint: t('pet.slashSearchArg'),
         });
       }
-      if (petEnabled) {
-        list.push(
-          {
-            id: 'pet',
-            label: '/pet',
-            insert: '/pet ',
-            descKey: 'pet.slashPet',
-            icon: 'sparkles',
-            argHint: 'wake | tuck | <petId>',
-          },
-          {
-            id: 'pet-wake',
-            label: '/pet wake',
-            insert: '/pet wake',
-            descKey: 'pet.slashPetWake',
-            icon: 'eye',
-          },
-          {
-            id: 'pet-tuck',
-            label: '/pet tuck',
-            insert: '/pet tuck',
-            descKey: 'pet.slashPetTuck',
-            icon: 'eye',
-          },
-          {
-            id: 'hatch',
-            label: '/hatch',
-            insert: '/hatch ',
-            descKey: 'pet.slashHatch',
-            icon: 'sparkles',
-            argHint: t('pet.slashHatchArg'),
-          },
-        );
-      }
       return list;
-    }, [petEnabled, researchAvailable, t, enabledMcpServers, onOpenMcpSettings]);
+    }, [researchAvailable, t, enabledMcpServers, onOpenMcpSettings]);
 
     const filteredSlash = useMemo(() => {
       if (!slash) return [] as SlashCommand[];
@@ -1785,70 +1693,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 </div>
               ) : null}
             </div>
-            {petEnabled ? (
-              <div className="composer-pet-wrap" ref={petWrapRef}>
-                <button
-                  type="button"
-                  className={`composer-pet${petConfig?.adopted ? ' adopted' : ''}`}
-                  onClick={() => {
-                    if (petConfig?.adopted) {
-                      if (!petConfig.enabled) setPetMenuOpen(true);
-                      else setPetMenuOpen((v) => !v);
-                    } else {
-                      setPetMenuOpen((v) => !v);
-                    }
-                  }}
-                  title={t('pet.composerTitle')}
-                  aria-haspopup="menu"
-                  aria-expanded={petMenuOpen}
-                  aria-label={t('pet.composerTitle')}
-                >
-                  <span className="composer-pet-glyph">
-                    {petConfig?.adopted ? (petConfig?.custom?.glyph || '🐾') : '🐾'}
-                  </span>
-                  <span className="composer-pet-label">
-                    {petConfig?.adopted ? (petConfig?.custom?.name || 'Buddy') : t('pet.composerMenuTitle')}
-                  </span>
-                </button>
-                {petMenuOpen ? (
-                  <div
-                    className="composer-pet-menu"
-                    style={petMenuStyle}
-                  >
-                    <div className="composer-pet-menu-head">
-                      <strong>{t('pet.composerMenuTitle')}</strong>
-                      <span>{t('pet.composerMenuHint')}</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="composer-pet-menu-row toggle"
-                      onClick={() => {
-                        if (petConfig?.adopted) {
-                          onTogglePet?.();
-                        } else {
-                          onOpenPetSettings?.();
-                        }
-                        setPetMenuOpen(false);
-                      }}
-                    >
-                      <Icon name={petConfig?.enabled ? 'eye-off' : 'eye'} size={12} />
-                      <span>{petConfig?.enabled ? t('pet.tuck') : t('pet.wake')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="composer-pet-menu-row settings"
-                      onClick={() => {
-                        onOpenPetSettings?.();
-                        setPetMenuOpen(false);
-                      }}
-                    >
-                      <Icon name="settings" size={12} />
-                      <span>{t('pet.composerOpenSettings')}</span>
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
             <button
               className="icon-btn"
               data-testid="chat-attach"

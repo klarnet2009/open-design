@@ -1910,6 +1910,8 @@ export interface Dict {
   'workspace.sideChatDefaultTitle': string;
   'workspace.newTerminal': string;
   'workspace.newTerminalDescription': string;
+  'workspace.terminalStarting': string;
+  'workspace.terminalStartingDescription': string;
   'workspace.terminalSessionEnded': string;
   'workspace.terminalReconnecting': string;
   'workspace.terminalStartFailed': string;

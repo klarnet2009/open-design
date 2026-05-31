@@ -3713,6 +3713,49 @@ export function ProjectView({
     [project, onProjectChange],
   );
 
+  const activeConversationChatState = useMemo(
+    () =>
+      activeConversationId
+        ? {
+            conversationId: activeConversationId,
+            messages,
+            streaming: currentConversationStreaming,
+            sendDisabled: currentConversationSendDisabled,
+            queuedItems: currentConversationQueuedItems,
+            error: conversationLoadError ?? error ?? audioVoiceOptionsError,
+            onSend: handleSend,
+            onRetry: handleRetry,
+            onStop: handleStop,
+            onSubmitForm: (text: string) => {
+              if (currentConversationActionDisabled) return;
+              void handleSend(text, [], []);
+            },
+            onRemoveQueuedSend: removeQueuedChatSend,
+            onUpdateQueuedSend: updateQueuedChatSend,
+            onSendQueuedNow: sendQueuedChatSendNow,
+            onAssistantFeedback: handleAssistantFeedback,
+          }
+        : undefined,
+    [
+      activeConversationId,
+      audioVoiceOptionsError,
+      conversationLoadError,
+      currentConversationActionDisabled,
+      currentConversationQueuedItems,
+      currentConversationSendDisabled,
+      currentConversationStreaming,
+      error,
+      handleAssistantFeedback,
+      handleRetry,
+      handleSend,
+      handleStop,
+      messages,
+      removeQueuedChatSend,
+      sendQueuedChatSendNow,
+      updateQueuedChatSend,
+    ],
+  );
+
   const handleChangeDesignSystemId = useCallback(
     (nextId: string | null) => {
       if ((project.designSystemId ?? null) === nextId) return;
@@ -4652,6 +4695,7 @@ export function ProjectView({
           onRenameConversation={handleRenameConversation}
           onConversationSessionModeChange={handleConversationSessionModeChange}
           onNewConversation={handleNewConversation}
+          activeConversationChat={activeConversationChatState}
           onCreateSideChat={handleCreateSideChat}
         />
       </div>

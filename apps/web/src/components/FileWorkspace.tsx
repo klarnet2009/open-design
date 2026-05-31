@@ -63,9 +63,8 @@ import {
 } from './sketch-model';
 import { TabLauncherMenu } from './workspace/TabLauncherMenu';
 import { buildLauncherActions, type LauncherContext } from './workspace/tab-launcher';
-import { SideChatTab } from './workspace/SideChatTab';
+import { SideChatTab, type ActiveConversationChatState } from './workspace/SideChatTab';
 import { TerminalViewer } from './workspace/TerminalViewer';
-import { FileTreeExplorer } from './workspace/FileTreeExplorer';
 import {
   isSideChatTabId,
   conversationIdFromSideChatTabId,
@@ -139,6 +138,7 @@ interface Props {
   onRenameConversation?: (id: string, title: string) => void;
   onConversationSessionModeChange?: (id: string, mode: ChatSessionMode) => void;
   onNewConversation?: () => void;
+  activeConversationChat?: ActiveConversationChatState;
   /** Create a context-seeded conversation and resolve its id (backs the launcher). */
   onCreateSideChat?: (seedFromConversationId: string | null) => Promise<string | null>;
 }
@@ -269,6 +269,7 @@ export function FileWorkspace({
   onRenameConversation,
   onConversationSessionModeChange,
   onNewConversation,
+  activeConversationChat,
   onCreateSideChat,
 }: Props) {
   const t = useT();
@@ -287,6 +288,14 @@ export function FileWorkspace({
   // Persisted tabs come from the parent. Active tab can transiently point
   // at a pending sketch — pending sketches are not in tabsState.tabs.
   const persistedTabs = tabsState.tabs;
+  // Launcher actions resolve asynchronously; keep the latest committed state
+  // out of render closures so new tab kinds append instead of replaying stale tabs.
+  const tabsStateRef = useRef(tabsState);
+  const lastTabsStatePropRef = useRef(tabsState);
+  if (lastTabsStatePropRef.current !== tabsState) {
+    tabsStateRef.current = tabsState;
+    lastTabsStatePropRef.current = tabsState;
+  }
   const [activeTab, setActiveTab] = useState<string>(
     tabsState.active ?? defaultRootTab,
   );
@@ -309,8 +318,6 @@ export function FileWorkspace({
   // Transient feedback when a launcher "create" action (e.g. New Terminal)
   // fails on the daemon side, so the click is never a silent no-op.
   const [launcherToast, setLauncherToast] = useState<string | null>(null);
-  // Toggleable file-tree explorer docked beside the preview (Task #5).
-  const [explorerOpen, setExplorerOpen] = useState(false);
 
   const visibleFiles = useMemo(
     () => files.filter((file) => !isLiveArtifactImplementationPath(file.name)),
@@ -329,9 +336,14 @@ export function FileWorkspace({
     setActiveTab(tabsState.active ?? defaultRootTab);
   }, [tabsState.active, defaultRootTab]);
 
+  function commitTabsState(next: OpenTabsState) {
+    tabsStateRef.current = next;
+    onTabsStateChange(next);
+  }
+
   function setPersistedActive(name: string | null) {
     setActiveTab(name ?? defaultRootTab);
-    onTabsStateChange({ tabs: persistedTabs, active: name });
+    commitTabsState({ tabs: tabsStateRef.current.tabs, active: name });
   }
 
   function activatePending(name: string) {
@@ -359,18 +371,16 @@ export function FileWorkspace({
     if (!openRequest) return;
     const name = openRequest.name;
     if (!name) return;
-    onTabsStateChange({
-      tabs: persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
-      active: name,
-    });
-    setActiveTab(name);
+    openFile(name);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequest]);
 
   function openFile(name: string) {
     setUploadError(null);
-    onTabsStateChange({
-      tabs: persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
+    const currentTabs = tabsStateRef.current.tabs;
+    const nextTabs = currentTabs.includes(name) ? currentTabs : [...currentTabs, name];
+    commitTabsState({
+      tabs: nextTabs,
       active: name,
     });
     setActiveTab(name);
@@ -384,41 +394,12 @@ export function FileWorkspace({
   // the first.
   function openFileReplacing(openName: string, closeName: string) {
     setUploadError(null);
-    const withoutClosed = persistedTabs.filter((tabName) => tabName !== closeName);
+    const withoutClosed = tabsStateRef.current.tabs.filter((tabName) => tabName !== closeName);
     const nextTabs = withoutClosed.includes(openName)
       ? withoutClosed
       : [...withoutClosed, openName];
-    onTabsStateChange({ tabs: nextTabs, active: openName });
+    commitTabsState({ tabs: nextTabs, active: openName });
     setActiveTab(openName);
-  }
-
-  // Switch the preview to `name` in place: activate an existing tab, or — when
-  // the active tab is a plain, non-dirty file tab — replace it so browsing the
-  // file-tree explorer doesn't pile up tabs (this is the "switch in place"
-  // contract, distinct from the "+" launcher which always opens a new tab).
-  // Falls back to opening a fresh tab when there's nothing safe to replace
-  // (Design Files / Design System / chat / terminal / live-artifact / a dirty
-  // sketch is active).
-  function switchPreview(name: string) {
-    if (persistedTabs.includes(name)) {
-      setPersistedActive(name);
-      return;
-    }
-    const active = activeTab;
-    const activeSketch = sketches[active];
-    const replaceable =
-      persistedTabs.includes(active) &&
-      active !== DESIGN_FILES_TAB &&
-      active !== DESIGN_SYSTEM_TAB &&
-      !isSideChatTabId(active) &&
-      !isTerminalTabId(active) &&
-      !isLiveArtifactTabId(active) &&
-      !(activeSketch && (activeSketch.dirty || !activeSketch.persisted));
-    if (replaceable) {
-      openFileReplacing(name, active);
-    } else {
-      openFile(name);
-    }
   }
 
   function closeTab(name: string) {
@@ -437,12 +418,13 @@ export function FileWorkspace({
       }
       return;
     }
-    const nextTabs = persistedTabs.filter((n) => n !== name);
+    const currentState = tabsStateRef.current;
+    const nextTabs = currentState.tabs.filter((n) => n !== name);
     const nextActive =
-      tabsState.active === name
+      currentState.active === name
         ? nextTabs[nextTabs.length - 1] ?? null
-        : tabsState.active;
-    onTabsStateChange({ tabs: nextTabs, active: nextActive });
+        : currentState.active;
+    commitTabsState({ tabs: nextTabs, active: nextActive });
     setActiveTab(nextActive ?? DESIGN_FILES_TAB);
     setSketches((curr) => {
       const next = { ...curr };
@@ -458,15 +440,17 @@ export function FileWorkspace({
     edge: TabDropEdge,
   ) {
     if (draggedName === targetName) return;
-    if (!persistedTabs.includes(draggedName)) return;
-    if (!persistedTabs.includes(targetName)) return;
+    const currentState = tabsStateRef.current;
+    const currentTabs = currentState.tabs;
+    if (!currentTabs.includes(draggedName)) return;
+    if (!currentTabs.includes(targetName)) return;
 
-    const nextTabs = persistedTabs.filter((name) => name !== draggedName);
+    const nextTabs = currentTabs.filter((name) => name !== draggedName);
     const targetIndex = nextTabs.indexOf(targetName);
     if (targetIndex === -1) return;
     nextTabs.splice(edge === 'after' ? targetIndex + 1 : targetIndex, 0, draggedName);
-    if (arraysEqual(nextTabs, persistedTabs)) return;
-    onTabsStateChange({ tabs: nextTabs, active: tabsState.active });
+    if (arraysEqual(nextTabs, currentTabs)) return;
+    commitTabsState({ tabs: nextTabs, active: currentState.active });
   }
 
   function clearTabDragState() {
@@ -631,12 +615,13 @@ export function FileWorkspace({
     const ok = await deleteProjectFile(projectId, name);
     if (ok) {
       await onRefreshFiles();
-      const nextTabs = persistedTabs.filter((n) => n !== name);
+      const currentState = tabsStateRef.current;
+      const nextTabs = currentState.tabs.filter((n) => n !== name);
       if (activeTab === name) {
         // User is viewing the file being deleted: fall back to another
         // open tab (or the Design Files panel if none remain).
         const nextActive = nextTabs[nextTabs.length - 1] ?? null;
-        onTabsStateChange({ tabs: nextTabs, active: nextActive });
+        commitTabsState({ tabs: nextTabs, active: nextActive });
         setActiveTab(nextActive ?? DESIGN_FILES_TAB);
       } else {
         // Deletion was triggered from the Design Files panel (or another
@@ -645,8 +630,8 @@ export function FileWorkspace({
         // be navigated away. Only clear the persisted active reference
         // when it points at the deleted file so we don't leave a dangling
         // pointer behind.
-        const nextActive = tabsState.active === name ? null : tabsState.active;
-        onTabsStateChange({ tabs: nextTabs, active: nextActive });
+        const nextActive = currentState.active === name ? null : currentState.active;
+        commitTabsState({ tabs: nextTabs, active: nextActive });
       }
       setSketches((curr) => {
         const next = { ...curr };
@@ -668,16 +653,17 @@ export function FileWorkspace({
     }
     if (deleted.length > 0) {
       await onRefreshFiles();
+      const currentState = tabsStateRef.current;
       const deletedSet = new Set(deleted);
-      const nextTabs = persistedTabs.filter((n) => !deletedSet.has(n));
+      const nextTabs = currentState.tabs.filter((n) => !deletedSet.has(n));
       if (activeTab && deletedSet.has(activeTab)) {
         const nextActive = nextTabs[nextTabs.length - 1] ?? null;
-        onTabsStateChange({ tabs: nextTabs, active: nextActive });
+        commitTabsState({ tabs: nextTabs, active: nextActive });
         setActiveTab(nextActive ?? DESIGN_FILES_TAB);
       } else {
         const nextActive =
-          tabsState.active && deletedSet.has(tabsState.active) ? null : tabsState.active;
-        onTabsStateChange({ tabs: nextTabs, active: nextActive });
+          currentState.active && deletedSet.has(currentState.active) ? null : currentState.active;
+        commitTabsState({ tabs: nextTabs, active: nextActive });
       }
       setSketches((curr) => {
         const next = { ...curr };
@@ -704,9 +690,10 @@ export function FileWorkspace({
     const renamed = result.file;
     await onRefreshFiles();
 
-    const nextTabs = persistedTabs.map((name) => (name === oldName ? renamed.name : name));
-    const nextActive = tabsState.active === oldName ? renamed.name : tabsState.active;
-    onTabsStateChange({ tabs: nextTabs, active: nextActive });
+    const currentState = tabsStateRef.current;
+    const nextTabs = currentState.tabs.map((name) => (name === oldName ? renamed.name : name));
+    const nextActive = currentState.active === oldName ? renamed.name : currentState.active;
+    commitTabsState({ tabs: nextTabs, active: nextActive });
     if (activeTab === oldName) setActiveTab(renamed.name);
 
     setSketches((curr) => {
@@ -834,8 +821,9 @@ export function FileWorkspace({
         },
       }));
       // Promote the previously-pending sketch into the persisted tab list.
-      onTabsStateChange({
-        tabs: persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
+      const currentTabs = tabsStateRef.current.tabs;
+      commitTabsState({
+        tabs: currentTabs.includes(name) ? currentTabs : [...currentTabs, name],
         active: name,
       });
       setActiveTab(name);
@@ -1079,17 +1067,6 @@ export function FileWorkspace({
             sticky-left Design Files entry and this button. */}
         <div className="ws-tabs-actions">
           <button
-            type="button"
-            className={`icon-only ws-tab-add${explorerOpen ? ' active' : ''}`}
-            data-testid="workspace-files-explorer-toggle"
-            aria-pressed={explorerOpen}
-            title={t('workspace.designFiles')}
-            aria-label={t('workspace.designFiles')}
-            onClick={() => setExplorerOpen((v) => !v)}
-          >
-            <Icon name="folder" size={15} />
-          </button>
-          <button
             ref={launcherBtnRef}
             type="button"
             className="icon-only ws-tab-add"
@@ -1122,7 +1099,7 @@ export function FileWorkspace({
           onDismiss={() => setLauncherToast(null)}
         />
       ) : null}
-      <div className={`ws-body${explorerOpen ? ' with-explorer' : ''}`}>
+      <div className="ws-body">
         {/* Banner moved into DesignFilesPanel for the Design Files tab so
             single-click preview (which keeps activeTab on DESIGN_FILES_TAB)
             no longer leaves a stale banner mounted above the preview.
@@ -1251,6 +1228,7 @@ export function FileWorkspace({
             onRenameConversation={onRenameConversation}
             onSessionModeChange={onConversationSessionModeChange}
             onNewConversation={onNewConversation}
+            activeConversationChat={activeConversationChat}
             onRequestOpenFile={openFile}
           />
         ) : isTerminalTabId(activeTab) ? (
@@ -1301,13 +1279,6 @@ export function FileWorkspace({
             .
           </div>
         )}
-        {explorerOpen ? (
-          <FileTreeExplorer
-            files={visibleFiles}
-            activeFileName={activeFile?.name ?? null}
-            onSelectFile={switchPreview}
-          />
-        ) : null}
       </div>
       <input
         ref={fileInputRef}

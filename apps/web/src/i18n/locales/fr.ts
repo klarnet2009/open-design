@@ -1494,6 +1494,8 @@ export const fr: Dict = {
   'workspace.sideChatDefaultTitle': 'Chat latéral',
   'workspace.newTerminal': 'Nouveau terminal',
   'workspace.newTerminalDescription': 'Ouvrir un shell dans le répertoire du projet dans un nouvel onglet',
+  'workspace.terminalStarting': 'Démarrage du terminal…',
+  'workspace.terminalStartingDescription': 'Préparation du shell du projet. Cela prend généralement quelques secondes.',
   'workspace.terminalSessionEnded': 'Session terminée',
   'workspace.terminalReconnecting': 'Reconnexion…',
   'workspace.terminalStartFailed': 'Impossible de démarrer la session de terminal',

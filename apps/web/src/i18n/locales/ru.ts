@@ -985,6 +985,8 @@ export const ru: Dict = {
   'workspace.sideChatDefaultTitle': 'Боковой чат',
   'workspace.newTerminal': 'Новый терминал',
   'workspace.newTerminalDescription': 'Открыть оболочку в каталоге проекта в новой вкладке',
+  'workspace.terminalStarting': 'Запуск терминала…',
+  'workspace.terminalStartingDescription': 'Подготавливаем оболочку проекта. Обычно это занимает несколько секунд.',
   'workspace.terminalSessionEnded': 'Сеанс завершён',
   'workspace.terminalReconnecting': 'Переподключение…',
   'workspace.terminalStartFailed': 'Не удалось запустить сеанс терминала',

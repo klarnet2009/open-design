@@ -964,6 +964,8 @@ export const ar: Dict = {
   'workspace.sideChatDefaultTitle': 'Side chat',
   'workspace.newTerminal': 'New Terminal',
   'workspace.newTerminalDescription': 'Open a shell in the project directory in a new tab',
+  'workspace.terminalStarting': 'جارٍ بدء تشغيل الطرفية…',
+  'workspace.terminalStartingDescription': 'يتم تجهيز صدفة المشروع. يستغرق ذلك عادة بضع ثوانٍ.',
   'workspace.terminalSessionEnded': 'Session ended',
   'workspace.terminalReconnecting': 'Reconnecting…',
   'workspace.terminalStartFailed': 'Could not start the terminal session',

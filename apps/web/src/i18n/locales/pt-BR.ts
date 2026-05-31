@@ -985,6 +985,8 @@ export const ptBR: Dict = {
   'workspace.sideChatDefaultTitle': 'Chat lateral',
   'workspace.newTerminal': 'Novo terminal',
   'workspace.newTerminalDescription': 'Abrir um shell no diretório do projeto em uma nova aba',
+  'workspace.terminalStarting': 'Iniciando terminal…',
+  'workspace.terminalStartingDescription': 'Preparando o shell do projeto. Normalmente leva alguns segundos.',
   'workspace.terminalSessionEnded': 'Sessão encerrada',
   'workspace.terminalReconnecting': 'Reconectando…',
   'workspace.terminalStartFailed': 'Não foi possível iniciar a sessão de terminal',

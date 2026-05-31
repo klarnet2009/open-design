@@ -1578,6 +1578,8 @@ export const zhCN: Dict = {
   'workspace.sideChatDefaultTitle': '侧边对话',
   'workspace.newTerminal': '新建终端',
   'workspace.newTerminalDescription': '在新标签页中打开项目目录的终端',
+  'workspace.terminalStarting': '正在启动项目终端…',
+  'workspace.terminalStartingDescription': '正在连接项目目录，通常只需几秒。',
   'workspace.terminalSessionEnded': '会话已结束',
   'workspace.terminalReconnecting': '正在重新连接…',
   'workspace.terminalStartFailed': '无法启动终端会话',

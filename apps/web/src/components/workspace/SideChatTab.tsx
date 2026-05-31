@@ -4,12 +4,47 @@ import { ChatPane } from '../ChatPane';
 import type {
   AgentInfo,
   AppConfig,
+  ChatAttachment,
+  ChatCommentAttachment,
+  ChatMessage,
+  ChatMessageFeedbackChange,
   Conversation,
   ProjectFile,
 } from '../../types';
 import type { ChatSessionMode } from '@open-design/contracts';
+import type { ChatSendMeta } from '../ChatComposer';
 import { useConversationChat } from './useConversationChat';
 import styles from './SideChatTab.module.css';
+
+export interface ActiveConversationChatState {
+  conversationId: string;
+  messages: ChatMessage[];
+  streaming: boolean;
+  sendDisabled?: boolean;
+  queuedItems?: Array<{
+    id: string;
+    prompt: string;
+    attachments?: ChatAttachment[];
+    commentAttachments?: ChatCommentAttachment[];
+  }>;
+  error: string | null;
+  onSend: (
+    prompt: string,
+    attachments: ChatAttachment[],
+    commentAttachments: ChatCommentAttachment[],
+    meta?: ChatSendMeta,
+  ) => void;
+  onRetry?: (assistantMessage: ChatMessage) => void;
+  onStop: () => void;
+  onSubmitForm?: (text: string) => void;
+  onRemoveQueuedSend?: (id: string) => void;
+  onUpdateQueuedSend?: (id: string, prompt: string) => void;
+  onSendQueuedNow?: (id: string) => void;
+  onAssistantFeedback?: (
+    assistantMessage: ChatMessage,
+    change: ChatMessageFeedbackChange,
+  ) => void;
+}
 
 interface Props {
   projectId: string;
@@ -31,6 +66,8 @@ interface Props {
   onRenameConversation?: (id: string, title: string) => void;
   onSessionModeChange?: (id: string, mode: ChatSessionMode) => void;
   onNewConversation?: () => void;
+  /** Live ProjectView state for the primary conversation when this tab mirrors it. */
+  activeConversationChat?: ActiveConversationChatState;
   /** Forward produced-file / tool-card open requests to the workspace. */
   onRequestOpenFile?: (name: string) => void;
 }
@@ -53,6 +90,7 @@ export function SideChatTab({
   onRenameConversation,
   onSessionModeChange,
   onNewConversation,
+  activeConversationChat,
   onRequestOpenFile,
 }: Props) {
   const t = useT();
@@ -65,6 +103,10 @@ export function SideChatTab({
     locale,
     sessionMode,
   });
+  const controlledChat =
+    activeConversationChat?.conversationId === conversationId
+      ? activeConversationChat
+      : null;
 
   return (
     <div className={styles.sideChat} data-testid="side-chat-tab">
@@ -76,19 +118,28 @@ export function SideChatTab({
       </div>
       <div className={styles.pane}>
         <ChatPane
-          messages={chat.messages}
-          streaming={chat.streaming}
-          error={chat.error}
+          messages={controlledChat?.messages ?? chat.messages}
+          streaming={controlledChat?.streaming ?? chat.streaming}
+          sendDisabled={controlledChat?.sendDisabled}
+          queuedItems={controlledChat?.queuedItems}
+          onRemoveQueuedSend={controlledChat?.onRemoveQueuedSend}
+          onUpdateQueuedSend={controlledChat?.onUpdateQueuedSend}
+          onSendQueuedNow={controlledChat?.onSendQueuedNow}
+          error={controlledChat ? controlledChat.error : chat.error}
           projectId={projectId}
           sessionMode={sessionMode}
           onSessionModeChange={(mode) => onSessionModeChange?.(conversationId, mode)}
           projectFiles={projectFiles}
           projectFileNames={projectFileNames}
           onEnsureProject={async () => projectId}
-          onSend={chat.onSend}
-          onRetry={chat.onRetry}
-          onStop={chat.onStop}
-          onSubmitForm={(text) => chat.onSend(text, [], [])}
+          onSend={controlledChat?.onSend ?? chat.onSend}
+          onRetry={controlledChat?.onRetry ?? chat.onRetry}
+          onStop={controlledChat?.onStop ?? chat.onStop}
+          onSubmitForm={(text) => {
+            if (controlledChat?.onSubmitForm) controlledChat.onSubmitForm(text);
+            else chat.onSend(text, [], []);
+          }}
+          onAssistantFeedback={controlledChat?.onAssistantFeedback}
           onRequestOpenFile={onRequestOpenFile}
           conversations={conversations}
           activeConversationId={conversationId}

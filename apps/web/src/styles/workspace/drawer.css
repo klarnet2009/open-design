@@ -1502,12 +1502,8 @@
   gap: 4px;
   align-items: center;
   flex: 0 0 auto;
-  /* Sits to the right of the scrolling tab bar. Pad + a subtle left-edge
-     shadow mirror the Design Files right-edge shadow so middle tabs that
-     scroll up against it read as tucking underneath rather than bleeding
-     through. */
+  /* Sits to the right of the scrolling tab bar without adding a divider. */
   padding-left: 6px;
-  box-shadow: -4px 0 6px -4px rgba(0, 0, 0, 0.12);
 }
 .ws-tab-add {
   width: 28px;
@@ -1578,12 +1574,6 @@
   display: flex;
   flex-direction: column;
   position: relative;
-}
-/* When the file-tree explorer is open, reserve a right gutter that the
-   absolutely positioned panel fills, so it docks beside the preview instead of
-   overlapping it. */
-.ws-body.with-explorer {
-  padding-right: 280px;
 }
 
 .designs-empty-state {

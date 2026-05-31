@@ -964,6 +964,8 @@ export const ko: Dict = {
   'workspace.sideChatDefaultTitle': '사이드 채팅',
   'workspace.newTerminal': '새 터미널',
   'workspace.newTerminalDescription': '새 탭에서 프로젝트 디렉터리의 셸 열기',
+  'workspace.terminalStarting': '터미널을 시작하는 중…',
+  'workspace.terminalStartingDescription': '프로젝트 셸을 준비하고 있습니다. 보통 몇 초 정도 걸립니다.',
   'workspace.terminalSessionEnded': '세션이 종료되었습니다',
   'workspace.terminalReconnecting': '다시 연결하는 중…',
   'workspace.terminalStartFailed': '터미널 세션을 시작할 수 없습니다',

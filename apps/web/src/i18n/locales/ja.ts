@@ -851,6 +851,8 @@ export const ja: Dict = {
   'workspace.sideChatDefaultTitle': 'サイドチャット',
   'workspace.newTerminal': '新しいターミナル',
   'workspace.newTerminalDescription': 'プロジェクトディレクトリのシェルを新しいタブで開く',
+  'workspace.terminalStarting': 'ターミナルを起動しています…',
+  'workspace.terminalStartingDescription': 'プロジェクトのシェルを準備しています。通常は数秒で完了します。',
   'workspace.terminalSessionEnded': 'セッションが終了しました',
   'workspace.terminalReconnecting': '再接続しています…',
   'workspace.terminalStartFailed': 'ターミナルセッションを開始できませんでした',

@@ -28,6 +28,12 @@ vi.mock('../../src/providers/registry', async () => {
   };
 });
 
+vi.mock('../../src/components/workspace/TerminalViewer', () => ({
+  TerminalViewer: ({ terminalId }: { terminalId: string }) => (
+    <div data-testid="terminal-viewer">{terminalId}</div>
+  ),
+}));
+
 const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
 const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
 const mockedWriteProjectTextFile = vi.mocked(writeProjectTextFile);
@@ -390,6 +396,85 @@ describe('FileWorkspace upload input', () => {
     );
 
     expect(markup).toContain('Show chat');
+  });
+});
+
+describe('FileWorkspace launcher tab creation', () => {
+  it('appends a new terminal to the latest tab list after parent tabs change', async () => {
+    mockedFetchProjectFileText.mockResolvedValue('');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ terminal: { id: 'term-1' } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+    const onTabsStateChange = vi.fn();
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-1',
+      projectKind: 'prototype',
+      files: [],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange,
+    };
+
+    const { rerender } = render(<FileWorkspace {...baseProps} />);
+    rerender(
+      <FileWorkspace
+        {...baseProps}
+        tabsState={{ tabs: ['chat:existing'], active: null }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(await screen.findByRole('button', { name: /New Terminal/i }));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['chat:existing', 'terminal:term-1'],
+        active: 'terminal:term-1',
+      });
+    });
+  });
+
+  it('appends a new side chat to the latest tab list after parent tabs change', async () => {
+    mockedFetchProjectFileText.mockResolvedValue('');
+    const onTabsStateChange = vi.fn();
+    const onCreateSideChat = vi.fn(async () => 'conversation-2');
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-1',
+      projectKind: 'prototype',
+      files: [],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange,
+      onCreateSideChat,
+    };
+
+    const { rerender } = render(<FileWorkspace {...baseProps} />);
+    rerender(
+      <FileWorkspace
+        {...baseProps}
+        tabsState={{ tabs: ['terminal:existing'], active: null }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(await screen.findByRole('button', { name: /New Side Chat/i }));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['terminal:existing', 'chat:conversation-2'],
+        active: 'chat:conversation-2',
+      });
+    });
   });
 });
 

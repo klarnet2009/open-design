@@ -1178,6 +1178,8 @@ export const zhTW: Dict = {
   'workspace.sideChatDefaultTitle': '側邊對話',
   'workspace.newTerminal': '新增終端機',
   'workspace.newTerminalDescription': '在新分頁中開啟專案目錄的終端機',
+  'workspace.terminalStarting': '正在啟動專案終端機…',
+  'workspace.terminalStartingDescription': '正在連接專案目錄，通常只需幾秒。',
   'workspace.terminalSessionEnded': '工作階段已結束',
   'workspace.terminalReconnecting': '正在重新連線…',
   'workspace.terminalStartFailed': '無法啟動終端機工作階段',
