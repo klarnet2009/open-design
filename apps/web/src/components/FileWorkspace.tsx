@@ -25,6 +25,8 @@ import {
   uploadProjectFiles,
   writeProjectTextFile,
 } from '../providers/registry';
+import { createTerminal } from '../state/projects';
+import { Toast } from './Toast';
 import { deriveFileOps, type FileOpEntry } from '../runtime/file-ops';
 import { latestTodosFromEvents, type TodoItem } from '../runtime/todos';
 import {
@@ -46,7 +48,7 @@ import { DesignFilesPanel } from './DesignFilesPanel';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
-import { Icon } from './Icon';
+import { Icon, type IconName } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
 import { PasteTextDialog } from './PasteTextDialog';
@@ -58,6 +60,19 @@ import {
   parseSketchWorkspaceDocument,
   type SketchItem,
 } from './sketch-model';
+import { TabLauncherMenu } from './workspace/TabLauncherMenu';
+import { buildLauncherActions, type LauncherContext } from './workspace/tab-launcher';
+import { SideChatTab } from './workspace/SideChatTab';
+import { TerminalViewer } from './workspace/TerminalViewer';
+import { FileTreeExplorer } from './workspace/FileTreeExplorer';
+import {
+  isSideChatTabId,
+  conversationIdFromSideChatTabId,
+  isTerminalTabId,
+  terminalIdFromTabId,
+  isLiveArtifactTabId,
+} from '../types';
+import type { AgentInfo, AppConfig, Conversation } from '../types';
 
 interface Props {
   projectId: string;
@@ -108,6 +123,22 @@ interface Props {
   githubConnected?: boolean;
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
+  // Side Chat (`chat:<conversationId>` tab) wiring. Threaded from ProjectView
+  // so a secondary ChatPane can run against a seeded conversation without
+  // FileWorkspace owning any chat state. All optional: a workspace mounted
+  // without these simply offers no "New Side Chat" launcher entry.
+  chatConfig?: AppConfig;
+  chatAgentsById?: Map<string, AgentInfo>;
+  chatLocale?: string;
+  conversations?: Conversation[];
+  /** The primary chat's active conversation — the seed source for new side chats. */
+  activeConversationId?: string | null;
+  onSelectConversation?: (id: string) => void;
+  onDeleteConversation?: (id: string) => void;
+  onRenameConversation?: (id: string, title: string) => void;
+  onNewConversation?: () => void;
+  /** Create a context-seeded conversation and resolve its id (backs the launcher). */
+  onCreateSideChat?: (seedFromConversationId: string | null) => Promise<string | null>;
 }
 
 interface SketchState {
@@ -226,6 +257,16 @@ export function FileWorkspace({
   githubConnected,
   commentPortalId,
   onCommentModeChange,
+  chatConfig,
+  chatAgentsById,
+  chatLocale,
+  conversations = [],
+  activeConversationId = null,
+  onSelectConversation,
+  onDeleteConversation,
+  onRenameConversation,
+  onNewConversation,
+  onCreateSideChat,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -259,6 +300,14 @@ export function FileWorkspace({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
   const draggedTabNameRef = useRef<string | null>(null);
+  // "+" launcher (open-a-file search + registry-driven create-new actions).
+  const [launcherOpen, setLauncherOpen] = useState(false);
+  const launcherBtnRef = useRef<HTMLButtonElement | null>(null);
+  // Transient feedback when a launcher "create" action (e.g. New Terminal)
+  // fails on the daemon side, so the click is never a silent no-op.
+  const [launcherToast, setLauncherToast] = useState<string | null>(null);
+  // Toggleable file-tree explorer docked beside the preview (Task #5).
+  const [explorerOpen, setExplorerOpen] = useState(false);
 
   const visibleFiles = useMemo(
     () => files.filter((file) => !isLiveArtifactImplementationPath(file.name)),
@@ -338,6 +387,35 @@ export function FileWorkspace({
       : [...withoutClosed, openName];
     onTabsStateChange({ tabs: nextTabs, active: openName });
     setActiveTab(openName);
+  }
+
+  // Switch the preview to `name` in place: activate an existing tab, or — when
+  // the active tab is a plain, non-dirty file tab — replace it so browsing the
+  // file-tree explorer doesn't pile up tabs (this is the "switch in place"
+  // contract, distinct from the "+" launcher which always opens a new tab).
+  // Falls back to opening a fresh tab when there's nothing safe to replace
+  // (Design Files / Design System / chat / terminal / live-artifact / a dirty
+  // sketch is active).
+  function switchPreview(name: string) {
+    if (persistedTabs.includes(name)) {
+      setPersistedActive(name);
+      return;
+    }
+    const active = activeTab;
+    const activeSketch = sketches[active];
+    const replaceable =
+      persistedTabs.includes(active) &&
+      active !== DESIGN_FILES_TAB &&
+      active !== DESIGN_SYSTEM_TAB &&
+      !isSideChatTabId(active) &&
+      !isTerminalTabId(active) &&
+      !isLiveArtifactTabId(active) &&
+      !(activeSketch && (activeSketch.dirty || !activeSketch.persisted));
+    if (replaceable) {
+      openFileReplacing(name, active);
+    } else {
+      openFile(name);
+    }
   }
 
   function closeTab(name: string) {
@@ -803,6 +881,40 @@ export function FileWorkspace({
   const isActiveSketch = activeFile?.kind === 'sketch' && isSketchName(activeFile.name);
   const activeSketch = activeFile && isActiveSketch ? sketches[activeFile.name] : null;
 
+  // The "+" launcher's create-new actions come from the registry. Side Chat
+  // (Stage 2) is the first; Terminal / Browser register later. `openTab`
+  // reuses the same tab-state path as opening a file so a new chat:<id> /
+  // terminal:<id> tab is focused. `createSideChat` is only wired when the
+  // parent threaded the chat callbacks, so a chat-less workspace hides the
+  // action entirely.
+  const launcherContext = useMemo<LauncherContext>(
+    () => ({
+      projectId,
+      openTab: openFile,
+      ...(onCreateSideChat
+        ? { createSideChat: () => onCreateSideChat(activeConversationId) }
+        : {}),
+      // Terminal needs only the project id — spawn the PTY here and hand the
+      // resulting session id back so the launcher opens a terminal:<id> tab.
+      // Surface a toast when the daemon can't start one (e.g. node-pty not
+      // compiled) instead of silently no-opping the launcher action.
+      createTerminal: async () => {
+        const term = await createTerminal(projectId);
+        if (!term) {
+          setLauncherToast(t('workspace.terminalStartFailed'));
+          return null;
+        }
+        return term.id;
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [projectId, onCreateSideChat, activeConversationId],
+  );
+  const launcherActions = useMemo(
+    () => buildLauncherActions(launcherContext),
+    [launcherContext],
+  );
+
   return (
     <div
       className={[
@@ -878,11 +990,37 @@ export function FileWorkspace({
             const isPending = sketchEntry && !sketchEntry.persisted;
             const onDisk = visibleFiles.find((f) => f.name === name);
             const liveArtifact = liveArtifactEntries.find((entry) => entry.tabId === name);
+            const isTerminal = isTerminalTabId(name);
+            const isSideChat = isSideChatTabId(name);
             const kind = liveArtifact ? 'live-artifact' : onDisk?.kind ?? (isSketchName(name) ? 'sketch' : 'text');
+            // Terminal and side-chat tabs are not files: give them a friendly
+            // label + glyph instead of the raw `terminal:<id>` / `chat:<id>` id.
+            let label: string;
+            if (isTerminal) {
+              // Number multiple terminals so the tabs stay distinguishable.
+              const ordinal = tabNames.filter(isTerminalTabId).indexOf(name) + 1;
+              label =
+                ordinal > 1
+                  ? `${t('workspace.newTerminal')} ${ordinal}`
+                  : t('workspace.newTerminal');
+            } else if (isSideChat) {
+              const conv = conversations.find(
+                (c) => c.id === conversationIdFromSideChatTabId(name),
+              );
+              label = conv?.title?.trim() || t('workspace.sideChatDefaultTitle');
+            } else {
+              label = `${liveArtifact?.title ?? name}${dirtyMark}`;
+            }
+            const iconNameOverride: IconName | undefined = isTerminal
+              ? 'terminal'
+              : isSideChat
+                ? 'comment'
+                : undefined;
             return (
               <Tab
                 key={name}
-                label={`${liveArtifact?.title ?? name}${dirtyMark}`}
+                label={label}
+                iconNameOverride={iconNameOverride}
                 active={activeTab === name}
                 onActivate={() =>
                   isPending ? activatePending(name) : setPersistedActive(name)
@@ -932,8 +1070,56 @@ export function FileWorkspace({
             );
           })}
         </div>
+        {/* Pinned to the right, OUTSIDE the horizontally-scrolling
+            `.ws-tabs-bar`, so the "+" launcher is never clipped by that
+            container's overflow and the middle file tabs scroll between the
+            sticky-left Design Files entry and this button. */}
+        <div className="ws-tabs-actions">
+          <button
+            type="button"
+            className={`icon-only ws-tab-add${explorerOpen ? ' active' : ''}`}
+            data-testid="workspace-files-explorer-toggle"
+            aria-pressed={explorerOpen}
+            title={t('workspace.designFiles')}
+            aria-label={t('workspace.designFiles')}
+            onClick={() => setExplorerOpen((v) => !v)}
+          >
+            <Icon name="folder" size={15} />
+          </button>
+          <button
+            ref={launcherBtnRef}
+            type="button"
+            className="icon-only ws-tab-add"
+            data-testid="workspace-add-tab"
+            aria-haspopup="dialog"
+            aria-expanded={launcherOpen}
+            title={t('workspace.newTab')}
+            aria-label={t('workspace.newTab')}
+            onClick={() => setLauncherOpen((v) => !v)}
+          >
+            <Icon name="plus" size={15} />
+          </button>
+        </div>
       </div>
-      <div className="ws-body">
+      {launcherOpen ? (
+        <TabLauncherMenu
+          anchor={launcherBtnRef.current}
+          files={visibleFiles}
+          openTabNames={tabNames}
+          actions={launcherActions}
+          launcherContext={launcherContext}
+          onOpenFile={openFile}
+          onClose={() => setLauncherOpen(false)}
+        />
+      ) : null}
+      {launcherToast ? (
+        <Toast
+          message={launcherToast}
+          role="alert"
+          onDismiss={() => setLauncherToast(null)}
+        />
+      ) : null}
+      <div className={`ws-body${explorerOpen ? ' with-explorer' : ''}`}>
         {/* Banner moved into DesignFilesPanel for the Design Files tab so
             single-click preview (which keeps activeTab on DESIGN_FILES_TAB)
             no longer leaves a stale banner mounted above the preview.
@@ -1047,6 +1233,29 @@ export function FileWorkspace({
           ) : (
             <div className="viewer-empty">{t('workspace.loadingSketch')}</div>
           )
+        ) : isSideChatTabId(activeTab) && chatConfig && chatAgentsById ? (
+          <SideChatTab
+            key={`${projectId}:${activeTab}`}
+            projectId={projectId}
+            conversationId={conversationIdFromSideChatTabId(activeTab)}
+            config={chatConfig}
+            agentsById={chatAgentsById}
+            locale={chatLocale ?? 'en'}
+            projectFiles={visibleFiles}
+            conversations={conversations}
+            onSelectConversation={onSelectConversation ?? (() => {})}
+            onDeleteConversation={onDeleteConversation ?? (() => {})}
+            onRenameConversation={onRenameConversation}
+            onNewConversation={onNewConversation}
+            onRequestOpenFile={openFile}
+          />
+        ) : isTerminalTabId(activeTab) ? (
+          <TerminalViewer
+            key={activeTab}
+            projectId={projectId}
+            terminalId={terminalIdFromTabId(activeTab)}
+            onClose={() => closeTab(activeTab)}
+          />
         ) : activeLiveArtifact ? (
           <LiveArtifactViewer
             projectId={projectId}
@@ -1088,6 +1297,13 @@ export function FileWorkspace({
             .
           </div>
         )}
+        {explorerOpen ? (
+          <FileTreeExplorer
+            files={visibleFiles}
+            activeFileName={activeFile?.name ?? null}
+            onSelectFile={switchPreview}
+          />
+        ) : null}
       </div>
       <input
         ref={fileInputRef}
@@ -2471,6 +2687,7 @@ function Tab({
   onClose,
   closable = true,
   kind,
+  iconNameOverride,
   liveArtifact,
   draggable = false,
   dragging = false,
@@ -2487,6 +2704,8 @@ function Tab({
   onClose?: () => void;
   closable?: boolean;
   kind?: ProjectFile['kind'] | 'live-artifact';
+  /** Force a specific icon (e.g. non-file tabs like terminal:<id>). */
+  iconNameOverride?: IconName;
   liveArtifact?: LiveArtifactWorkspaceEntry;
   draggable?: boolean;
   dragging?: boolean;
@@ -2498,7 +2717,7 @@ function Tab({
   onDragEnd?: () => void;
 }) {
   const t = useT();
-  const iconName = kindIconName(kind);
+  const iconName = iconNameOverride ?? kindIconName(kind);
   return (
     <div
       className={[

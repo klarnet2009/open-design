@@ -287,6 +287,14 @@ export interface ConversationResponse {
 
 export interface CreateConversationRequest {
   title?: string | null;
+  /**
+   * Seed the new conversation with another conversation's context by copying
+   * its messages. The source must belong to the same project; a missing or
+   * foreign id is ignored and an empty conversation is created. Powers the
+   * "Side Chat" launcher, which forks the current chat's context into a new
+   * conversation.
+   */
+  seedFromConversationId?: string | null;
 }
 
 export interface UpdateConversationRequest {

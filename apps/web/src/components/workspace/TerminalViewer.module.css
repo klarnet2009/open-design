@@ -1,0 +1,75 @@
+/* Terminal workspace tab: an xterm.js surface mounted in `.ws-body`, bound to a
+   daemon PTY session. Output arrives over SSE; keystrokes/resizes flow back up
+   over POST. Fills the body so the terminal owns the scroll. */
+
+/* Pull in the upstream xterm stylesheet (cursor, selection, viewport scroll).
+   Importing it from the component module keeps the dependency colocated with
+   the only consumer instead of widening the global cascade. */
+@import '@xterm/xterm/css/xterm.css';
+
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  /* Match xterm's default dark canvas so the padding gutter doesn't flash the
+     light app background between renders. */
+  background: #1e1e1e;
+}
+
+.surface {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* The fit addon measures this element; give the terminal a small, even
+     gutter so the first row/column isn't flush against the tab edge. */
+  padding: 8px 10px;
+  overflow: hidden;
+}
+
+/* xterm injects its own `.terminal` element here; let it fill the gutter box. */
+.surface :global(.xterm) {
+  height: 100%;
+}
+
+.banner {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.bannerIcon {
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+
+.bannerLabel {
+  flex: 1 1 auto;
+}
+
+.restartBtn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.restartBtn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+}

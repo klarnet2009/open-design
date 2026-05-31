@@ -431,6 +431,8 @@ import { registerHandoffRoutes } from './handoff-routes.js';
 import { EmptyTranscriptError, synthesizeHandoffPrompt } from './handoff-design.js';
 import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './chat-routes.js';
+import { registerTerminalRoutes } from './terminal-routes.js';
+import { createTerminalService } from './terminals.js';
 import { registerStaticResourceRoutes } from './static-resource-routes.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routine-routes.js';
 import { assertServerContextSatisfiesRoutes } from './route-context-contract.js';
@@ -5232,6 +5234,10 @@ export async function startServer({
     readAnalyticsContext,
   };
 
+  // Interactive Terminal sessions (node-pty). In-memory, process-local, and
+  // killed on daemon shutdown — see shutdownDaemonRuns below.
+  const terminalService = createTerminalService();
+
   // PostHog runtime config.
   //
   // - `enabled` reflects ONLY the user's consent toggle (Privacy → "Share
@@ -5681,6 +5687,14 @@ export async function startServer({
     ids: idDeps,
     telemetry: { reportFinalizedMessage },
     validation: validationDeps,
+  });
+  registerTerminalRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    projectFiles: projectFileDeps,
+    terminals: terminalService,
   });
   registerImportRoutes(app, {
     db,
@@ -13955,6 +13969,7 @@ export async function startServer({
       daemonShutdownStarted = true;
       daemonShuttingDown = true;
       await design.runs.shutdownActive({ graceMs: resolveChatRunShutdownGraceMs() });
+      await terminalService.shutdownActive();
       await design.analytics.shutdown();
     };
     let server;

@@ -3631,6 +3631,26 @@ export function ProjectView({
     [project.id],
   );
 
+  // Side Chat launcher: create a NEW conversation seeded with the current
+  // chat's context (the daemon copies the source conversation's messages) and
+  // resolve its id. The new conversation is a normal conversation, so it shows
+  // up in the header ConversationsMenu the moment we prepend it here. The
+  // FileWorkspace launcher action then opens it as a `chat:<id>` tab.
+  const handleCreateSideChat = useCallback(
+    async (seedFromConversationId: string | null): Promise<string | null> => {
+      const fresh = await createConversation(
+        project.id,
+        t('workspace.sideChatDefaultTitle'),
+        { seedFromConversationId },
+      );
+      if (!fresh) return null;
+      setConversations((curr) => [fresh, ...curr]);
+      onProjectsRefresh();
+      return fresh.id;
+    },
+    [project.id, t, onProjectsRefresh],
+  );
+
   const handleProjectRename = useCallback(
     (newName: string) => {
       const trimmed = newName.trim();
@@ -4580,6 +4600,16 @@ export function ProjectView({
           githubConnected={githubConnected}
           commentPortalId={commentInspectorPortalId}
           onCommentModeChange={setCommentInspectorActive}
+          chatConfig={config}
+          chatAgentsById={agentsById}
+          chatLocale={locale}
+          conversations={conversations}
+          activeConversationId={activeConversationId}
+          onSelectConversation={handleSelectConversation}
+          onDeleteConversation={handleDeleteConversation}
+          onRenameConversation={handleRenameConversation}
+          onNewConversation={handleNewConversation}
+          onCreateSideChat={handleCreateSideChat}
         />
       </div>
       {projectActionsToast ? (

@@ -597,7 +597,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     if (!getProject(db, req.params.id)) {
       return res.status(404).json({ error: 'project not found' });
     }
-    const { title } = req.body || {};
+    const { title, seedFromConversationId } = req.body || {};
     const now = Date.now();
     const conv = insertConversation(db, {
       id: randomId(),
@@ -606,6 +606,28 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       createdAt: now,
       updatedAt: now,
     });
+    // Side Chat: inherit the source conversation's context by copying its
+    // messages into the fresh conversation. Be defensive — a missing or
+    // cross-project source id silently yields an empty conversation.
+    if (conv && typeof seedFromConversationId === 'string' && seedFromConversationId) {
+      const source = getConversation(db, seedFromConversationId);
+      if (source && source.projectId === req.params.id) {
+        for (const m of listMessages(db, seedFromConversationId)) {
+          // Fresh id per copied message; upsertMessage assigns the next
+          // position so role/content ordering is preserved. Drop the source's
+          // run pointers (runId/runStatus/lastRunEventId): they belong to the
+          // OTHER conversation's runs, and a copied still-`running` assistant
+          // turn would otherwise render a perpetual spinner in the side chat.
+          upsertMessage(db, conv.id, {
+            ...m,
+            id: randomId(),
+            runId: undefined,
+            runStatus: undefined,
+            lastRunEventId: undefined,
+          });
+        }
+      }
+    }
     res.json({ conversation: conv });
   });
 
